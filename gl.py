@@ -46,14 +46,52 @@ def check_dcel(face):
             if not (edge.face.edge is edge or edge.face.edge is edge.next or edge.face.edge is edge.next.next):
                 print edge.face.edge, 'face edge'
 
+def draw_circle(x, y, r):
+    glBegin(GL_LINE_LOOP)
+    for i in xrange(128):
+        ang = i * math.pi / 64
+        glVertex(r * math.cos(ang) + x, r * math.sin(ang) + y)
+    glEnd()
+
 def draw_dcel(face):
     edges = dcel_edges(face)
+
+    if False:
+        glColor(0, 0, 1)
+        faces = set(edge.face for edge in edges)
+        faces.discard(None)
+        for face in faces:
+            x, y, r = face.data.circumcenter()
+            draw_circle(x, y, r)
+
+    if True:
+        glColor(0, 0, 1)
+        glBegin(GL_LINES)
+        for edge in edges:
+            lhs = edge.face
+            rhs = edge.twin.face
+            if lhs is not None and rhs is not None:
+                x, y, r = lhs.data.circumcenter()
+                glVertex(x, y)
+                x, y, r = rhs.data.circumcenter()
+                glVertex(x, y)
+
+        glEnd()
+            
 
     glColor(0, 0, 0)
     glBegin(GL_POINTS)
     for edge in edges:
         glVertex(edge.origin.x, edge.origin.y)
+    if True:
+        glColor(0, 0, 1)
+        faces = set(edge.face for edge in edges)
+        faces.discard(None)
+        for face in faces:
+            x, y, r = face.data.circumcenter()
+            glVertex(x, y)
     glEnd()
+
 
     glBegin(GL_LINES)
     for edge in edges:
@@ -78,13 +116,18 @@ def draw_dcel(face):
             glVertex(edge.twin.origin.x + perp_x, edge.twin.origin.y + perp_y)
     glEnd()
 
-seed = 4000
+seed = 5
 def paint():
     glClearColor(.7, .2, .2, 1.)
     glClear(GL_COLOR_BUFFER_BIT)
 
     glColor(0, 0, 0, 1)
-    glPointSize(4)
+    glPointSize(10)
+    glLineWidth(1.5)
+    glEnable(GL_POINT_SMOOTH)
+    glEnable(GL_LINE_SMOOTH)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
     t = halo.make_triangle(
         halo.Vertex(-.8, -.8),
@@ -98,11 +141,15 @@ def paint():
         for child in leaf.children:
             halo.legalize(child, v)
 
+    # round(halo.Vertex(-.2, 0))
+    # round(halo.Vertex(.2, 0))
+    # round(halo.Vertex(.2, -.4))
+
     global seed
     r = random.Random(seed)
     print 'seed =', seed
-    seed += 1
-    for i in xrange(100):
+    # seed += 1
+    for i in xrange(28):
         v = halo.Vertex(r.uniform(-1., 1.), r.uniform(-1., 1.))
         if t.inside(v):
             round(v)
@@ -113,7 +160,7 @@ def paint():
     draw_dcel(dcel)
 
     glutSwapBuffers()
-    glutPostRedisplay()
+    # glutPostRedisplay()
 
 def resize(width, height):
     glViewport(0, 0, width, height)

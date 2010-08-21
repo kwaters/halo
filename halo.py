@@ -27,6 +27,18 @@ class HalfEdge(object):
         C = -(A * self.origin.x + B * self.origin.y)
         return (A, B, C)
 
+    def perpendicular(self):
+        origin = self.origin
+        target = self.twin.origin
+        midx = (origin.x + target.x) / 2
+        midy = (origin.y + target.y) / 2
+
+        A = origin.x - target.x
+        B = origin.y - target.y
+        C = -(A * midx + B * midy)
+        return (A, B, C)
+        
+
     def __str__(self):
         return '%s -> %s' % (self.origin, self.twin.origin)
 
@@ -80,6 +92,24 @@ class Triangle(object):
         # print det
 
         return det > limit
+
+    def circumcenter(self):
+        A1, B1, C1 = self.face.edge.perpendicular()
+        A2, B2, C2 = self.face.edge.next.perpendicular()
+        x = (B2 * C1 - B1 * C2) / (A2 * B1 - A1 * B2)
+        if B1:
+            y = (-A1 * x - C1) / B1
+        else:
+            y = (-A2 * x - C2) / B2
+        error = x * A2 + y * B2 + C2
+        assert error < 1e-10 and error > -1e-10
+        
+        pt = self.face.edge.origin
+        import math
+        r = (pt.x - x) * (pt.x - x) + (pt.y - y) * (pt.y - y)
+        r = math.sqrt(r)
+
+        return x, y, r
 
     def child(self, v):
         # assert self.inside(v)
