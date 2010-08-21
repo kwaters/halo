@@ -300,6 +300,9 @@ def make_triangle(v0, v1, v2):
     e1.next = e2
     e2.next = e0
     f = Face(e0)
+    e0.face = f
+    e1.face = f
+    e2.face = f
     return Triangle(f)
 
 def legalize(triangle, v):
