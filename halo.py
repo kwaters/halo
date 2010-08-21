@@ -6,33 +6,74 @@ class OutsideTriangleError(Exception):
     pass
 
 class Vertex(object):
-    __slots__ = ['x', 'y', 'edge']
-    def __init__(self, x, y):
+    """Class representing a vertex.
+
+    'x', 'y' is the verticies position.
+    'edge' points to an edge leaving this vertex.
+    'artificial' is true if this vertex was not part of the input set
+
+    """
+    __slots__ = ['x', 'y', 'edge', 'artificial']
+    def __init__(self, x, y, artificial=False):
         self.x = x
         self.y = y
+        # TODO: Implement vertex edge tracking.  Serializing the triangles that
+        # form the Voronoi cells containing a vertex is the same as walking the
+        # edges that leave a vertex in the Delaunay triangulation.
         self.edge = None
+        self.artificial = artificial
 
-    def __str__(self):
-        return '(%f, %f)' % (self.x, self.y)
+    def __repr__(self):
+        return 'Vertex({0f}, {1f})' % (self.x, self.y)
 
 class HalfEdge(object):
-    __slots__ = ['origin', 'twin', 'next', 'face', 'flag']
+    """Class representing a directed edge.
+
+    This edge goes from 'origin' to 'twin.origin'.
+
+    'twin' is the edge going the opposite direction as this edge.
+    'origin' is the vertex this edge originates from.
+    'next' is the edge leaving 'twin.origin' that is part of the same face.
+    'face' is the face to the left of this edge.
+
+    """
+    __slots__ = ['origin', 'twin', 'next', 'face']
+
     def __init__(self):
+        """PRIVATE.  Use make_edge_pair instead."""
+
         self.next = None
         self.face = None
 
     def sign(self, v):
+        """Negative if vertex is to the left of this edge.
+        
+        There are faster ways of computing this, but we use the edge equations
+        for traversing the triangle tree.  We use edge equations here for
+        consistency.
+
+        """
         A, B, C = self.coefs()
         C = -(A * self.origin.x + B * self.origin.y)
         return A * v.x + B * v.y + C
 
     def coefs(self):
+        """Equation of the line containing this edge.
+
+        Returns (A, B, C) where A*x + B*y + C = 0.
+
+        """
         A = self.twin.origin.y - self.origin.y
         B = self.origin.x - self.twin.origin.x
         C = -(A * self.origin.x + B * self.origin.y)
         return (A, B, C)
 
     def perpendicular(self):
+        """Equation of the perpendicular bisector of this edge.
+
+        Returns (A, B, C) where A*x + B*y + C = 0.
+
+        """
         origin = self.origin
         target = self.twin.origin
         midx = (origin.x + target.x) / 2
@@ -43,17 +84,32 @@ class HalfEdge(object):
         C = -(A * midx + B * midy)
         return (A, B, C)
         
-
     def __str__(self):
         return '%s -> %s' % (self.origin, self.twin.origin)
 
+
 class Face(object):
+    """Class representing a face in the mesh.
+    
+    'data' is a user data point.
+    'edge' is a pointer to any edge facing this face.
+
+    """
     __slots__ = ['edge', 'data']
     def __init__(self, edge, data=None):
         self.edge = edge
         self.data = data
 
+
 class Triangle(object):
+    """A node in the triangle tree.
+
+    A node where 'face' is not None is a leaf node.
+    A non-leaf node has 2 or 3 children.  The children are guaranteed to cover
+    this triangle, however the union of the children may be larger than this
+    triangle.
+
+    """
     def __init__(self, face):
         self.face = face
         self.face.data = self
@@ -64,6 +120,10 @@ class Triangle(object):
         for i in xrange(3):
             self.coefs.append(e.coefs())
             e = e.next
+
+    def __repr__(self):
+        return 'Triangle({0}, {1}, {2})'.format(self.face.edge.origin,
+            self.face.edge.next.origin, self.face.edge.next.next.origin)
 
     def inside(self, v):
         """Is the vertex v contained in this triangle?"""
@@ -137,23 +197,23 @@ class Triangle(object):
         Vertex v must be contained in this triangle.
 
         """
+        # TODO: Optimize, we don't need to check against all 6 or 9 edge
+        # equations since we know v is in self.  In the 2 child case, one edge
+        # is sufficient.  In the 3 child case we need to check 2 edges.
         for child in self.children:
             if child.inside(v):
                 return child
         raise OutsideTriangleError()
 
     def find_leaf(self, v):
-        """Returns the leaf triangle containing vertex v"""
+        """Returns the leaf triangle containing vertex v."""
         triangle = self
         while triangle.children:
             triangle = triangle.child(v)
         return triangle
 
-    def __repr__(self):
-        return 'Triangle({0}, {1}, {2})'.format(self.face.edge.origin,
-            self.face.edge.next.origin, self.face.edge.next.next.origin)
-
     def deep_split(self, v):
+        """Split the leaf node containing vertex v by v."""
         leaf = self.find_leaf(v)
         leaf.split(v)
         return leaf
@@ -168,9 +228,9 @@ class Triangle(object):
         side1 = side0.next
         side2 = side1.next
 
-        e0 = make_edge_pair(v, side0.origin)
-        e1 = make_edge_pair(v, side1.origin)
-        e2 = make_edge_pair(v, side2.origin)
+        e0 = _make_edge_pair(v, side0.origin)
+        e1 = _make_edge_pair(v, side1.origin)
+        e2 = _make_edge_pair(v, side2.origin)
 
         e0.next = side0
         e1.next = side1
@@ -224,7 +284,7 @@ class Triangle(object):
         edge = self.far_edge(v)
         # The triangle opposite v.
         neighbor = edge.twin.face.data
-        # The vertex across from edge.
+        # The vertex opposite edge in neighbor.
         target = edge.twin.next.next.origin
 
         # Name edges that make up the quadrilateral
@@ -273,29 +333,27 @@ class Triangle(object):
 
         return v0x * v1y - v0y * v1x
 
-def make_edge_pair(v0, v1):
+def _make_edge_pair(v0, v1):
     """Make an edge from v0 to v1."""
 
     e0 = HalfEdge()
     e1 = HalfEdge()
     e0.twin = e1
     e0.origin = v0
-    e0.flag = False
     e1.twin = e0
     e1.origin = v1
-    e1.flag = True
 
     return e0
 
-def make_triangle(v0, v1, v2):
+def _make_triangle(v0, v1, v2):
     """ Make a triangle with vertices v0, v1, and v2.
 
     Vertices v0 v1 and v2 must be in counter-clockwise order.
 
     """
-    e0 = make_edge_pair(v0, v1)
-    e1 = make_edge_pair(v1, v2)
-    e2 = make_edge_pair(v2, v0)
+    e0 = _make_edge_pair(v0, v1)
+    e1 = _make_edge_pair(v1, v2)
+    e2 = _make_edge_pair(v2, v0)
     e0.next = e1
     e1.next = e2
     e2.next = e0
@@ -305,17 +363,55 @@ def make_triangle(v0, v1, v2):
     e2.face = f
     return Triangle(f)
 
-def legalize(triangle, v):
+
+def _legalize(triangle, v):
+    """Flip edges until 'triangle' is legal relative to vertex v."""
     face = triangle.far_edge(v).twin.face
     if face is not None:
         adjacent = face.data
         if adjacent.incircle(v):
             triangle.flip(v)
             assert len(triangle.children) == 2
-            legalize(triangle.children[0], v)
-            legalize(triangle.children[1], v)
+            _legalize(triangle.children[0], v)
+            _legalize(triangle.children[1], v)
+
+
+def triangulate(verticies, max_coord=None):
+    """Compute the Delauny triangulation of 'vertices.'
+
+    Returns the root of a triangle tree.
+    max_coord is the largest absolute value of any coordinate in verticies.
+    If None, it will be computed.
+
+    """
+    if max_coord is None:
+        max_coord = 0
+        for vertex in verticies:
+            max_coord = max(max_coord, abs(vertex.x), abs(vertex.y))
+
+    # Build a triangle that contains all points in vertices
+    M = 3 * max_coord
+    triangle = _make_triangle(Vertex(M, 0, True), Vertex(0, M, True),
+        Vertex(-M, -M, True))
+
+    # Add all the points
+    for vertex in verticies:
+        leaf = triangle.deep_split(vertex)
+        for child in leaf.children:
+            _legalize(child, vertex)
+
+    return triangle
+
+
+__all__ = ['Vertex', 'triangulate']
+
+
+##############################################################################
+# Testing methods
+
 
 def check_triangulation(triangle):
+    """Check that every leaf triangle's incircle contains no verticies."""
     triangles = set()
     def add_tris(tri):
         if not tri.children:
@@ -332,7 +428,6 @@ def check_triangulation(triangle):
         verts.add(triangle.face.edge.next.next.origin)
 
     for triangle in triangles:
-        # print triangle.area()
+        assert triangle.area() > 0
         for vert in verts:
             assert not triangle.incircle(vert, limit=1e-10)
-

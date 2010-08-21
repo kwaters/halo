@@ -96,27 +96,13 @@ def draw_dcel(face):
     glBegin(GL_LINES)
     for edge in edges:
         glColor(0, 0, 0)
-        glVertex(edge.origin.x, edge.origin.y)
-        glVertex(edge.twin.origin.x, edge.twin.origin.y)
-
-        if False:
-            v_x = edge.twin.origin.x - edge.origin.x
-            v_y = edge.twin.origin.y - edge.origin.y
-            perp_x = -v_x - v_y
-            perp_y = v_x - v_y
-            length = math.sqrt(perp_x * perp_x + perp_y * perp_y) * 10
-            perp_x /= length
-            perp_y /= length
-
-            if edge.flag:
-                glColor(0, 1, 0)
-            else:
-                glColor(0, 0, 1)
+        if not edge.origin.artificial and not edge.twin.origin.artificial:
+            glVertex(edge.origin.x, edge.origin.y)
             glVertex(edge.twin.origin.x, edge.twin.origin.y)
-            glVertex(edge.twin.origin.x + perp_x, edge.twin.origin.y + perp_y)
+
     glEnd()
 
-seed = 5
+seed = 72
 def paint():
     glClearColor(.7, .2, .2, 1.)
     glClear(GL_COLOR_BUFFER_BIT)
@@ -129,30 +115,15 @@ def paint():
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
-    t = halo.make_triangle(
-        halo.Vertex(-.8, -.8),
-        halo.Vertex(.8, -.8),
-        halo.Vertex(0, .8))
-    # t.split(halo.Vertex(-.2, 0))
-    # t.child(halo.Vertex(.2, 0)).split(halo.Vertex(.2, 0))
-
-    def round(v):
-        leaf = t.deep_split(v)
-        for child in leaf.children:
-            halo.legalize(child, v)
-# 
-    # round(halo.Vertex(-.2, 0))
-    # round(halo.Vertex(.2, 0))
-    # round(halo.Vertex(.2, -.4))
-
     global seed
     r = random.Random(seed)
     print 'seed =', seed
     # seed += 1
-    for i in xrange(28):
-        v = halo.Vertex(r.uniform(-1., 1.), r.uniform(-1., 1.))
-        if t.inside(v):
-            round(v)
+
+    points = [halo.Vertex(r.uniform(-1., 1.), r.uniform(-1., 1.))
+        for i in xrange(25)]
+
+    t = halo.triangulate(points)
     halo.check_triangulation(t)
 
     dcel = get_face(t)
