@@ -24,7 +24,7 @@ class Vertex(object):
         self.artificial = artificial
 
     def __repr__(self):
-        return 'Vertex({0f}, {1f})' % (self.x, self.y)
+        return 'Vertex({0:f}, {1:f})'.format(self.x, self.y)
 
 class HalfEdge(object):
     """Class representing a directed edge.
@@ -100,6 +100,24 @@ class Face(object):
         self.edge = edge
         self.data = data
 
+    def edge_set(self):
+        """The set of edges in the DCEL containing this face."""
+        working = set((self.edge,))
+        edges = set(working)
+
+        while working:
+            new = set()
+            for edge in working:
+                if edge.twin not in edges:
+                    edges.add(edge.twin)
+                    new.add(edge.twin)
+                if edge.next is not None and edge.next not in edges:
+                    edges.add(edge.next)
+                    new.add(edge.next)
+            working = new
+
+        return edges
+
 
 class Triangle(object):
     """A node in the triangle tree.
@@ -124,6 +142,12 @@ class Triangle(object):
     def __repr__(self):
         return 'Triangle({0}, {1}, {2})'.format(self.face.edge.origin,
             self.face.edge.next.origin, self.face.edge.next.next.origin)
+
+    def get_face(self):
+        """A face that's part of this triangulation."""
+        while self.children:
+            self = self.children[0]
+        return self.face
 
     def inside(self, v):
         """Is the vertex v contained in this triangle?"""
@@ -313,12 +337,18 @@ class Triangle(object):
         self.face.edge = edge
         neighbor.face.edge = edge.twin
 
+        # edges for the verticies loosing an edge
+        v_cw.origin.edge = v_cw
+        t_cw.origin.edge = t_cw
+
         # update triangle tree
         children = [Triangle(self.face), Triangle(neighbor.face)]
         self.children = children
         neighbor.children = children
         self.face = None
         neighbor.face = None
+
+        check_dcel(self)
 
     def area(self):
         """Return twice the signed area of this triangle."""
@@ -340,8 +370,12 @@ def _make_edge_pair(v0, v1):
     e1 = HalfEdge()
     e0.twin = e1
     e0.origin = v0
+    if e0.origin.edge is None:
+        e0.origin.edge = e0
     e1.twin = e0
     e1.origin = v1
+    if e1.origin.edge is None:
+        e1.origin.edge = e1
 
     return e0
 
@@ -428,6 +462,58 @@ def check_triangulation(triangle):
         verts.add(triangle.face.edge.next.next.origin)
 
     for triangle in triangles:
-        assert triangle.area() > 0
+        assert triangle.area() >= 0
         for vert in verts:
             assert not triangle.incircle(vert, limit=1e-10)
+
+class DcelError(Exception):
+    pass
+
+def check_dcel(triangle):
+    """Checks the DCEL invariants."""
+    edges = triangle.get_face().edge_set()
+    faces = set(edge.face for edge in edges)
+    faces.discard(None)
+    verticies = set(edge.origin for edge in edges)
+
+    def check(expression, error, *extras):
+        if not expression:
+            if extras:
+                error = '{0}: {1}'.format(error,
+                    ', '.join(str(extra) for extra in extras))
+            raise DcelError(error)
+            
+    # Check that all verticies have a link to an outgoing edge
+    for vertex in verticies:
+        check(vertex.edge is not None, 'Vertex.edge is None', vertex)
+        check(vertex.edge.origin == vertex, 'Vertex.edge', vertex, vertex.edge)
+    
+    # Check that all edges make well formed loops
+    seen = set()
+    for first in edges:
+        if first in seen:
+            continue
+        seen.add(first)
+        if first.next is None:
+            continue
+
+        edge = first.next
+        edge_count = 1
+        while edge is not first:
+            check(edge not in seen, 'Edge.next', edge)
+            check(edge.next is not None, 'Edge.next is None', edge)
+            edge_count += 1
+            seen.add(edge)
+            edge = edge.next
+        check(edge_count == 3, 'triangles', edge_count)
+
+
+    # checks that the face edge loop all points to face
+    for face in faces:
+        edge = face.edge.next
+        while True:
+            check(edge.face is face, 'Edge.face', edge, face)
+            edge = edge.next
+            if edge is face.edge:
+                break
+

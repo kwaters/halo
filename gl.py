@@ -9,42 +9,15 @@ from OpenGL.GLUT import *
 
 import voronoi
 
-def get_face(triangle):
-    while triangle.children:
-        triangle = triangle.children[0]
-    return triangle.face
-
-def dcel_edges(face):
-    working = set((face.edge,))
-    edges = set(working)
-
-    while working:
-        new = set()
-        for edge in working:
-            if edge.twin not in edges:
-                edges.add(edge.twin)
-                new.add(edge.twin)
-            if edge.next is not None and edge.next not in edges:
-                edges.add(edge.next)
-                new.add(edge.next)
-        working = new
-
-    return edges
-
-def check_dcel(face):
-    edges = dcel_edges(face)
-    for edge in edges:
-        if edge.next is not None:
-            if edge.next.next.next is not edge:
-                print edge, 'triangle'
-                print '  ', edge.next
-                print '  ', edge.next.next
-                print '  ', edge.next.next.next
-        if edge.face is not None:
-            if edge.face is not edge.next.face or edge.face is not edge.next.next.face:
-                print edge, 'face'
-            if not (edge.face.edge is edge or edge.face.edge is edge.next or edge.face.edge is edge.next.next):
-                print edge.face.edge, 'face edge'
+def good_face(face):
+    bad = False
+    edge = face.edge
+    while True:
+        bad = bad or edge.origin.artificial
+        edge = edge.next
+        if edge is face.edge:
+            break
+    return not bad
 
 def draw_circle(x, y, r):
     glBegin(GL_LINE_LOOP)
@@ -54,15 +27,16 @@ def draw_circle(x, y, r):
     glEnd()
 
 def draw_dcel(face):
-    edges = dcel_edges(face)
+    edges = face.edge_set()
 
     if False:
         glColor(0, 0, 1)
         faces = set(edge.face for edge in edges)
         faces.discard(None)
         for face in faces:
-            x, y, r = face.data.circle()
-            draw_circle(x, y, r)
+            if good_face(face):
+                x, y, r = face.data.circle()
+                draw_circle(x, y, r)
 
     if True:
         glColor(0, 0, 1)
@@ -70,11 +44,13 @@ def draw_dcel(face):
         for edge in edges:
             lhs = edge.face
             rhs = edge.twin.face
-            if lhs is not None and rhs is not None:
-                x, y = lhs.data.circumcenter()
-                glVertex(x, y)
-                x, y = rhs.data.circumcenter()
-                glVertex(x, y)
+            if not edge.origin.artificial and not edge.twin.origin.artificial:
+            # if lhs is not None and rhs is not None:
+                # if lhs.data.area() > 0 and rhs.data.area() > 0:
+                    x, y = lhs.data.circumcenter()
+                    glVertex(x, y)
+                    x, y = rhs.data.circumcenter()
+                    glVertex(x, y)
 
         glEnd()
             
@@ -88,8 +64,9 @@ def draw_dcel(face):
         faces = set(edge.face for edge in edges)
         faces.discard(None)
         for face in faces:
-            x, y = face.data.circumcenter()
-            glVertex(x, y)
+            if good_face(face):
+                x, y = face.data.circumcenter()
+                glVertex(x, y)
     glEnd()
 
 
@@ -126,8 +103,11 @@ def paint():
     t = voronoi.triangulate(points)
     voronoi.check_triangulation(t)
 
-    dcel = get_face(t)
-    check_dcel(dcel)
+    dcel = t.get_face()
+    try:
+        voronoi.check_dcel(t)
+    except Exception, e:
+        print e
     draw_dcel(dcel)
 
     glutSwapBuffers()
