@@ -17,9 +17,6 @@ class Vertex(object):
     def __init__(self, x, y, artificial=False):
         self.x = x
         self.y = y
-        # TODO: Implement vertex edge tracking.  Serializing the triangles that
-        # form the Voronoi cells containing a vertex is the same as walking the
-        # edges that leave a vertex in the Delaunay triangulation.
         self.edge = None
         self.artificial = artificial
 
@@ -128,6 +125,8 @@ class Triangle(object):
     triangle.
 
     """
+    __slots__ = ['face', 'children', 'coefs']
+
     def __init__(self, face):
         self.face = face
         self.face.data = self
@@ -348,8 +347,6 @@ class Triangle(object):
         self.face = None
         neighbor.face = None
 
-        check_dcel(self)
-
     def area(self):
         """Return twice the signed area of this triangle."""
         a = self.face.edge.origin
@@ -362,6 +359,7 @@ class Triangle(object):
         v1y = c.y - b.y
 
         return v0x * v1y - v0y * v1x
+
 
 def _make_edge_pair(v0, v1):
     """Make an edge from v0 to v1."""
