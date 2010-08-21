@@ -74,23 +74,17 @@ class Triangle(object):
         norm_c = c.x * c.x + c.y * c.y
         norm_d = d.x * d.x + d.y * d.y
 
-        ab = a.y * norm_b - b.y * norm_a
-        ac = a.y * norm_c - c.y * norm_a
-        ad = a.y * norm_d - d.y * norm_a
-        bc = b.y * norm_c - c.y * norm_b
-        bd = b.y * norm_d - d.y * norm_b
-        cd = c.y * norm_d - d.y * norm_c
+        A = a.x - d.x
+        B = a.y - d.y
+        C = norm_a - norm_d
+        D = b.x - d.x
+        E = b.y - d.y
+        F = norm_b - norm_d
+        G = c.x - d.x
+        H = c.y - d.y
+        I = norm_c - norm_d
 
-        det_a = b.x * cd - c.x * bd + d.x * bc
-        det_b = a.x * cd - c.x * ad + d.x * ac
-        det_c = a.x * bd - b.x * ad + d.x * ab
-        det_d = a.x * bc - b.x * ac + c.x * ab
-        det = -det_a + det_b - det_c + det_d
-
-        # print ab, ac, ad, bc, bd, cd
-        # print det_a, det_b, det_c, det_d
-        # print det
-
+        det = A * (E * I - F * H) - D * (B * I - C * H) + G * (B * F - C * E)
         return det > limit
 
     def circumcenter(self):
