@@ -7,7 +7,7 @@ import random
 from OpenGL.GL import *
 from OpenGL.GLUT import *
 
-import halo
+import voronoi
 
 def get_face(triangle):
     while triangle.children:
@@ -120,11 +120,11 @@ def paint():
     print 'seed =', seed
     # seed += 1
 
-    points = [halo.Vertex(r.uniform(-1., 1.), r.uniform(-1., 1.))
+    points = [voronoi.Vertex(r.uniform(-1., 1.), r.uniform(-1., 1.))
         for i in xrange(25)]
 
-    t = halo.triangulate(points)
-    halo.check_triangulation(t)
+    t = voronoi.triangulate(points)
+    voronoi.check_triangulation(t)
 
     dcel = get_face(t)
     check_dcel(dcel)
