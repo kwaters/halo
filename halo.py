@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+import math
+
+class OutsideTriangleError(Exception):
+    pass
+
 class Vertex(object):
     __slots__ = ['x', 'y', 'edge']
     def __init__(self, x, y):
@@ -61,10 +66,21 @@ class Triangle(object):
             e = e.next
 
     def inside(self, v):
+        """Is the vertex v contained in this triangle?"""
         return all(A * v.x + B * v.y + C <= 0 for (A, B, C) in self.coefs)
 
     def incircle(self, d, limit=0):
-        # print 'incircle({0}, {1})'.format(self, d)
+        """Is the Vertex d in the circle defined by this triangle?
+        
+        | a.x a.y (a.x^2 + a.y^2) 1 |
+        | b.x b.y (b.x^2 + b.y^2) 1 | > 0
+        | c.x c.y (c.x^2 + c.y^2) 1 |
+        | d.x d.y (d.x^2 + d.y^2) 1 |
+
+        If the about holds the point d is in the incircle of the triangle abc.
+        Reduce the determinate to a 3x3 by row operations on the final column.
+        
+        """
         a = self.face.edge.origin
         b = self.face.edge.next.origin
         c = self.face.edge.next.next.origin
@@ -88,38 +104,52 @@ class Triangle(object):
         return det > limit
 
     def circumcenter(self):
+        """The circumcenter of this triangle as a tuple (x, y)."""
+    
         A1, B1, C1 = self.face.edge.perpendicular()
         A2, B2, C2 = self.face.edge.next.perpendicular()
+        # N.B.: If the triangle is not degenerate this cannot cause division
+        # by 0.
         x = (B2 * C1 - B1 * C2) / (A2 * B1 - A1 * B2)
+        # TODO: if B1 is "small" use the second set of coordinates
         if B1:
             y = (-A1 * x - C1) / B1
         else:
             y = (-A2 * x - C2) / B2
-        error = x * A2 + y * B2 + C2
-        assert error < 1e-10 and error > -1e-10
-        
-        pt = self.face.edge.origin
-        import math
-        r = (pt.x - x) * (pt.x - x) + (pt.y - y) * (pt.y - y)
-        r = math.sqrt(r)
+        return x, y
 
-        return x, y, r
+    def circle(self):
+        """The circle defined by this triangle as a tuple (x, y, r).
+        
+        The circle centered at (x, r) of radius r passes through all three
+        vertices that define this triangle.
+
+        """
+        x, y = self.circumcenter()
+        v = self.face.edge.origin
+        r = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y)
+        return x, y, math.sqrt(r)
+
 
     def child(self, v):
-        # assert self.inside(v)
+        """The child of this triangle which contains the vertex v.
+
+        Vertex v must be contained in this triangle.
+
+        """
         for child in self.children:
             if child.inside(v):
                 return child
-        assert False
-        return None
+        raise OutsideTriangleError()
 
     def find_leaf(self, v):
+        """Returns the leaf triangle containing vertex v"""
         triangle = self
         while triangle.children:
             triangle = triangle.child(v)
         return triangle
 
-    def __str__(self):
+    def __repr__(self):
         return 'Triangle({0}, {1}, {2})'.format(self.face.edge.origin,
             self.face.edge.next.origin, self.face.edge.next.next.origin)
 
@@ -129,6 +159,11 @@ class Triangle(object):
         return leaf
 
     def split(self, v):
+        """Split this triangle into 3 triangles.
+
+        Vertex v must be inside this triangle.
+
+        """
         side0 = self.face.edge
         side1 = side0.next
         side2 = side1.next
@@ -162,9 +197,12 @@ class Triangle(object):
         self.face = None
         self.children = [Triangle(side0.face), Triangle(side1.face), Triangle(side2.face)]
 
-        # print [child.incircle(v) for child in self.children]
-
     def far_edge(self, v):
+        """Return the edge opposite vertex v.
+
+        Vertex v must be one of the vertices comprising this triangle.
+
+        """
         assert (v is self.face.edge.origin or
             v is self.face.edge.next.origin or
             v is self.face.edge.next.next.origin)
@@ -176,14 +214,18 @@ class Triangle(object):
         return edge
 
     def flip(self, v):
-        edge = self.far_edge(v)
-        neighbor = edge.twin.face.data
-        
-        # print 'flip({0}, {1})'.format(self, v)
-        # print 'neighbor = {0}'.format(neighbor)
+        """Flip the diagonal formed by this and the triangle opposite v.
 
+         Vertex v must be part of this triangle.  The two new triangles are
+         inserted as children of both original triangles.
+
+        """
+        # The edge opposite v.
+        edge = self.far_edge(v)
+        # The triangle opposite v.
+        neighbor = edge.twin.face.data
+        # The vertex across from edge.
         target = edge.twin.next.next.origin
-        # print 'target = {0}'.format(target)
 
         # Name edges that make up the quadrilateral
         v_cw = edge.next
@@ -219,6 +261,7 @@ class Triangle(object):
         neighbor.face = None
 
     def area(self):
+        """Return twice the signed area of this triangle."""
         a = self.face.edge.origin
         b = self.face.edge.next.origin
         c = self.face.edge.next.next.origin
@@ -231,6 +274,8 @@ class Triangle(object):
         return v0x * v1y - v0y * v1x
 
 def make_edge_pair(v0, v1):
+    """Make an edge from v0 to v1."""
+
     e0 = HalfEdge()
     e1 = HalfEdge()
     e0.twin = e1
@@ -243,7 +288,11 @@ def make_edge_pair(v0, v1):
     return e0
 
 def make_triangle(v0, v1, v2):
-    # assumes v0 v1 v2 are counter clockwise
+    """ Make a triangle with vertices v0, v1, and v2.
+
+    Vertices v0 v1 and v2 must be in counter-clockwise order.
+
+    """
     e0 = make_edge_pair(v0, v1)
     e1 = make_edge_pair(v1, v2)
     e2 = make_edge_pair(v2, v0)

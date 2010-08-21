@@ -61,7 +61,7 @@ def draw_dcel(face):
         faces = set(edge.face for edge in edges)
         faces.discard(None)
         for face in faces:
-            x, y, r = face.data.circumcenter()
+            x, y, r = face.data.circle()
             draw_circle(x, y, r)
 
     if True:
@@ -71,9 +71,9 @@ def draw_dcel(face):
             lhs = edge.face
             rhs = edge.twin.face
             if lhs is not None and rhs is not None:
-                x, y, r = lhs.data.circumcenter()
+                x, y = lhs.data.circumcenter()
                 glVertex(x, y)
-                x, y, r = rhs.data.circumcenter()
+                x, y = rhs.data.circumcenter()
                 glVertex(x, y)
 
         glEnd()
@@ -88,7 +88,7 @@ def draw_dcel(face):
         faces = set(edge.face for edge in edges)
         faces.discard(None)
         for face in faces:
-            x, y, r = face.data.circumcenter()
+            x, y = face.data.circumcenter()
             glVertex(x, y)
     glEnd()
 
@@ -140,7 +140,7 @@ def paint():
         leaf = t.deep_split(v)
         for child in leaf.children:
             halo.legalize(child, v)
-
+# 
     # round(halo.Vertex(-.2, 0))
     # round(halo.Vertex(.2, 0))
     # round(halo.Vertex(.2, -.4))
