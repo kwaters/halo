@@ -25,7 +25,7 @@ void main() {
 
     c = 10. * c;
     c = c - offset;
-    c = smoothstep(.45, .55, abs(frac(c) * 2. - 1.));
+    c = smoothstep(.45, .55, abs(fract(c) * 2. - 1.));
     // c = abs(frac(c) * 2. - 1.);
 
     gl_FragColor = vec4(c, c, c, 1.);
