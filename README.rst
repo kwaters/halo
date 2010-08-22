@@ -33,9 +33,9 @@ This time I'm going to compute the Voronoi cells directly before rendering.
    balanced binary tree and priority queue required for Fortune's algorithm in
    javascript, because I believe they will be quite slow.
 
-1. Implement the shaders and drawing code in Python.
+2. Implement the shaders and drawing code in Python.
 
-1. Implement Voronoi cell determination in javascript using Canvas2D and jQuery.
+3. Implement Voronoi cell determination in javascript using Canvas2D and jQuery.
 
-1. Sprinkle in some WebGL.
+4. Sprinkle in some WebGL.
 
