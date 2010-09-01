@@ -12,19 +12,21 @@
     <body>
         <canvas id="c" width="512" height="512"></canvas>
         <script id="halo_vertex" type="x-glsl-shader/x-fragment">
-            attribute vec2 position;
-            attribute vec2 control_point;
+            attribute highp vec2 position;
+            attribute highp vec2 control_point;
+            uniform highp mat2 view_transform;
             varying highp vec2 direction;
             void main() {
                 direction = position - control_point;
-                gl_Position = vec4(position, 0., 1.);
+                gl_Position = vec4(view_transform * position, 0., 1.);
             }
         </script>
         <script id="halo_fragment" type="x-glsl-shader/x-fragment">
             varying highp vec2 direction;
+            uniform highp float inv_width;
             void main() {
                 highp float c = length(direction);
-                c = 10. * c;
+                c = inv_width * c;
                 c = smoothstep(.45, .55, abs(fract(c) * 2. - 1.));
                 gl_FragColor = vec4(c, c, c, 1.);
             }
