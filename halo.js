@@ -227,13 +227,15 @@ var resize = function() {
     setTimeout(draw, 0);
 }
 
+var tick = new Date().getTime();
+
 var draw = function() {
     if (timeLog.running()) {
         timeLog.mark('browser');
         if (timeLog.samples() >= 20) {
-            timeLog.log();
+            // timeLog.log();
             timeLog.reset();
-            clearInterval(interval);
+            // clearInterval(interval);
         }
     }
 
@@ -286,6 +288,17 @@ var draw = function() {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STREAM_DRAW);
 
+    var tock = new Date().getTime(),
+        alpha = (tock - tick) / 5000.;
+    if (alpha > 1.) {
+        tick = tock;
+        texture.make(4, texture.size);
+        alpha = 0.;
+    }
+    texture.upload(alpha);
+
+    timeLog.mark('texture');
+
     var invWidth = 30.;
 
     shader.bind();
@@ -294,7 +307,6 @@ var draw = function() {
     shader.view_transform(viewMatrix);
     shader.inv_width(invWidth);
     shader.offset(0.1);
-    // TODO: compute the right answer for this
     shader.blur(invWidth * pixelSize);
     shader.tex(0);
     shader.inv_texture_size(1 / 32.);
@@ -336,6 +348,7 @@ window.hsvToRgb = hsvToRgb;
 
 var points = [],
     shader,
+    texture,
     interval;
 
 var makeColorRamp = function(h1, s1, v1, h2, s2, v2, size, count, limit,
@@ -380,6 +393,64 @@ var makeColorRamp = function(h1, s1, v1, h2, s2, v2, size, count, limit,
     return ramp;
 }
 
+var Texture = function(gl, size) {
+    this.gl = gl;
+    this.size = size;
+    this.textureId = this.gl.createTexture();
+    this.target = null;
+    this.last = null;
+
+    this.bind();
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+
+    this.make(4, this.size);
+    this.make(4, this.size);
+    this.upload(1.);
+}
+Texture.prototype = {
+    bind: function() {
+        this.gl.bindTexture(this.gl.TEXTURE_2D, this.textureId);
+    },
+    make: function(count, limit) {
+        var h1, s1, v1, h2, s2, v2;
+        do {
+            h1 = 2 * Math.random();
+            s1 = Math.random();
+            v1 = Math.random();
+            h2 = 2 * Math.random();
+            s2 = Math.random();
+            v2 = Math.random();
+        } while (s1 + s2 < .4 && v1 + v2 < .6);
+
+        this.set(makeColorRamp(h1, s1, v1, h2, s2, v2,
+            this.size, count, limit, true))
+    },
+    set: function(ramp) {
+        this.last = this.target;
+        this.target = ramp;
+    },
+    upload: function(alpha) {
+        var invAlpha = 1. - alpha,
+            i, l, data;
+
+        if (alpha < 1.) {
+            data = new Uint8Array(4 * this.size);
+            for (i = 0, l = 4 * this.size; i < l; i++) {
+                data[i] = (invAlpha * this.last[i] + alpha * this.target[i] +
+                    0.5) | 0;
+            }
+        } else {
+            data = this.target;
+        }
+
+        // this.bind();
+        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.size, 1,
+            0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, data);
+    }
+}
+
 var main = function() {
     gl = $("#c")[0].getContext('webgl');
     if (!gl)
@@ -390,21 +461,10 @@ var main = function() {
     shader = new Shader("halo_vertex", "halo_fragment");
     console.log('main', gl);
 
-    var texture = gl.createTexture(),
-        textureData = makeColorRamp(
-            2 * Math.random(), Math.random(), Math.random(),
-            2 * Math.random(), Math.random(), Math.random(),
-            32, 4, 32, true);
-
-    console.log(textureData);
-
+    texture = new Texture(gl, 32);
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 32, 1, 0, gl.RGBA,
-        gl.UNSIGNED_BYTE, textureData);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_WRAP_S, gl.REPEAT);
+    texture.bind();
+    console.log(texture);
 
     for (var i = 0; i < 20; ++i) {
         points.push(new Vertex(2 * Math.random() - 1, 2 * Math.random() - 1));
