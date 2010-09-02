@@ -55,6 +55,7 @@
                 // shader.
                 highp float fv = fract(r - .5);
                 r += smoothstep(.5 - blur, .5 + blur, fv) - fv;
+                //  clamp((fv - (.5 - blur)) / (2. * blur), 0., 1.);
 
                 // Normalize texture coordinates.  This cannot be backed into
                 // inv_width because the step must know where the texel

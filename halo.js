@@ -286,18 +286,91 @@ var draw = function() {
     shader.view_transform(viewMatrix);
     shader.inv_width(20.);
     shader.offset(0.1);
-    shader.blur(0.1);
+    // TODO: compute the right answer for this
+    shader.blur(0.05);
     shader.tex(0);
-    shader.inv_texture_size(.25);
+    shader.inv_texture_size(1 / 32.);
 
     gl.drawElements(gl.TRIANGLES, ii, gl.UNSIGNED_SHORT, 0);
 
     timeLog.mark('draw');
 }
 
+var mod = function(x, y) {
+    return x - Math.floor( x / y) * y;
+}
+
+var hsvToRgb = function(hue, saturation, value) {
+    // hue from 0. to 1. instead of the traditional 0 to 360
+
+    hue = mod(hue, 1.);
+    var c = value * saturation,
+        x = c * (1 - Math.abs(mod(hue * 6., 2.) - 1.)),
+        m = value - c,
+        rgb;
+
+    switch ((hue * 6.) | 0) {
+    case 0: rgb = [c, x, 0]; break;
+    case 1: rgb = [x, c, 0]; break;
+    case 2: rgb = [0, c, x]; break;
+    case 3: rgb = [0, x, c]; break;
+    case 4: rgb = [x, 0, c]; break;
+    case 5: rgb = [c, 0, x]; break;
+    }
+
+    rgb[0] = (255. * (rgb[0] + m) + 0.5) | 0;
+    rgb[1] = (255. * (rgb[1] + m) + 0.5) | 0;
+    rgb[2] = (255. * (rgb[2] + m) + 0.5) | 0;
+
+    return rgb
+}
+window.hsvToRgb = hsvToRgb;
+
 var points = [],
     shader,
     interval;
+
+var makeColorRamp = function(h1, s1, v1, h2, s2, v2, size, count, limit,
+    reflect) {
+    var ramp = new Uint8Array(4 * size),
+        hDiff = h2 - h1,
+        sDiff = s2 - s1,
+        vDiff = v2 - v1,
+        pos = 0,
+        posDir = 1,
+        alpha,
+        rgb,
+        i;
+
+    for (i = 0; i < limit; i++) {
+        alpha = pos / (count - 1);
+
+        rgb = hsvToRgb(h1 + alpha * hDiff, s1 + alpha * sDiff,
+            v1 + alpha * vDiff);
+        ramp[4 * i + 0] = rgb[0];
+        ramp[4 * i + 1] = rgb[1];
+        ramp[4 * i + 2] = rgb[2];
+        ramp[4 * i + 3] = 255;
+
+        pos += posDir;
+        if (pos < 0 || pos >= count) {
+            if (reflect) {
+                posDir = -posDir;
+                pos += 2 * posDir;
+            } else {
+                pos = 0;
+            }
+        }
+    }
+    for (; i < size; i++) {
+        ramp[4 * i + 0] = ramp[4 * (limit - 1) + 0];
+        ramp[4 * i + 1] = ramp[4 * (limit - 1) + 1];
+        ramp[4 * i + 2] = ramp[4 * (limit - 1) + 2];
+        ramp[4 * i + 3] = 255;
+    }
+
+    return ramp;
+}
 
 var main = function() {
     gl = $("#c")[0].getContext('webgl');
@@ -307,30 +380,19 @@ var main = function() {
     resize();
 
     shader = new Shader("halo_vertex", "halo_fragment");
+    console.log('main', gl);
 
     var texture = gl.createTexture(),
-        textureData = new Uint8Array(4 * 4);
+        textureData = makeColorRamp(
+            2 * Math.random(), Math.random(), Math.random(),
+            2 * Math.random(), Math.random(), Math.random(),
+            32, 4, 32, true);
 
-    textureData[0] = 255;
-    textureData[1] = 0;
-    textureData[2] = 0;
-    textureData[3] = 255;
-    textureData[4] = 0;
-    textureData[5] = 255;
-    textureData[6] = 0;
-    textureData[7] = 255;
-    textureData[8] = 0;
-    textureData[9] = 0;
-    textureData[10] = 255;
-    textureData[11] = 255;
-    textureData[12] = 0;
-    textureData[13] = 0;
-    textureData[14] = 0;
-    textureData[15] = 255;
+    console.log(textureData);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 4, 1, 0, gl.RGBA,
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 32, 1, 0, gl.RGBA,
         gl.UNSIGNED_BYTE, textureData);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -339,6 +401,7 @@ var main = function() {
     for (var i = 0; i < 20; ++i) {
         points.push(new Vertex(2 * Math.random() - 1, 2 * Math.random() - 1));
     }
+
 
     timeLog.reset();
     interval = setInterval(draw, 0);
