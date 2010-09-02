@@ -196,10 +196,41 @@ window.TimeLog = TimeLog;
 
 var timeLog = new TimeLog();
 
+var viewMatrix = new Float32Array(4);
+
 var resize = function() {
+    var canvas = document.getElementById("c");
+        width = canvas.clientWidth,
+        height = canvas.clientHeight,
+        ratio = width / height;
+    canvas.width = width;
+    canvas.height = height;
+
+    gl.viewport(0, 0, width, height);
+
+    viewMatrix[1] = viewMatrix[2] = 0.;
+    if (ratio > 1.) {
+        viewMatrix[0] = 1.;
+        viewMatrix[3] = ratio;
+    } else {
+        viewMatrix[0] = 1. / ratio;
+        viewMatrix[3] = 1.;
+    }
+
+    // redraw
+    setTimeout(draw, 0);
 }
 
 var draw = function() {
+    if (timeLog.running()) {
+        timeLog.mark('browser');
+        if (timeLog.samples() >= 20) {
+            timeLog.log();
+            timeLog.reset();
+            clearInterval(interval);
+        }
+    }
+
     timeLog.start();
 
     var tri = triangulate(points, 1);
@@ -252,7 +283,7 @@ var draw = function() {
     shader.bind();
     shader.position(2, gl.FLOAT, false, 16, 0);
     shader.control_point(2, gl.FLOAT, false, 16, 8);
-    shader.view_transform([1, 0, 0, 1]);
+    shader.view_transform(viewMatrix);
     shader.inv_width(20.);
     shader.offset(0.1);
     shader.blur(0.1);
@@ -262,17 +293,6 @@ var draw = function() {
     gl.drawElements(gl.TRIANGLES, ii, gl.UNSIGNED_SHORT, 0);
 
     timeLog.mark('draw');
-
-    setTimeout(function() {
-        if (timeLog.running()) {
-            // timeLog.mark('browser');
-            if (timeLog.samples() >= 20) {
-                timeLog.log();
-                timeLog.reset();
-                clearInterval(interval);
-            }
-        }
-    });
 }
 
 var points = [],
@@ -283,6 +303,8 @@ var main = function() {
     gl = $("#c")[0].getContext('webgl');
     if (!gl)
       gl = $("#c")[0].getContext('experimental-webgl');
+    $(window).resize(resize);
+    resize();
 
     shader = new Shader("halo_vertex", "halo_fragment");
 

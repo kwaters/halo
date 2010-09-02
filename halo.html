@@ -8,9 +8,20 @@
         <script type="text/javascript" src="third_party/jquery-1.4.2.min.js"></script>
         <script type="text/javascript" src="voronoi.js"></script>
         <script type="text/javascript" src="halo.js"></script>
+        <style type="text/css">
+            #c {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+            }
+            body {
+                margin: 0;
+                padding: 0;
+            }
+        </style>
     </head>
     <body>
-        <canvas id="c" width="512" height="512"></canvas>
+        <canvas id="c"></canvas>
         <script id="halo_vertex" type="x-glsl-shader/x-fragment">
             attribute highp vec2 position;
             attribute highp vec2 control_point;
