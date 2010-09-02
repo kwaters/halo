@@ -23,12 +23,34 @@
         </script>
         <script id="halo_fragment" type="x-glsl-shader/x-fragment">
             varying highp vec2 direction;
+
+            // scale and bias for radius
             uniform highp float inv_width;
+            uniform highp float offset;
+
+            // screen-space antialiasing factor
+            uniform highp float blur;
+
+            // Texture containing stripe colors and its size.
+            uniform lowp sampler2D tex;
+            uniform highp float inv_texture_size;
+
             void main() {
-                highp float c = length(direction);
-                c = inv_width * c;
-                c = smoothstep(.45, .55, abs(fract(c) * 2. - 1.));
-                gl_FragColor = vec4(c, c, c, 1.);
+                // radius, i.e. distance from the control point
+                highp float r = inv_width * length(direction) + offset;
+
+                // "Bilinear optimization."  We want the texture coordinates
+                // to stick around the texel centers, sort of like in a toon
+                // shader.
+                highp float fv = fract(r - .5);
+                r += smoothstep(.5 - blur, .5 + blur, fv) - fv;
+
+                // Normalize texture coordinates.  This cannot be backed into
+                // inv_width because the step must know where the texel
+                // centers are.
+                r *= inv_texture_size;
+
+                gl_FragColor = texture2D(tex, vec2(r, .5));
             }
         </script>
     </body>

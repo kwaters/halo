@@ -25,7 +25,8 @@ var Shader = function(vertexId, fragmentId) {
     var vertexSource = document.getElementById(vertexId).text,
         fragmentSource = document.getElementById(fragmentId).text,
         re = /(uniform|attribute)\s+\S+\s+(\S+)\s+(\S+)\s*;/g,
-        match = null;
+        match = null,
+        loadShaderSucceeded = false;
 
     this._arrays = 0;
     this._program = gl.createProgram();
@@ -33,10 +34,12 @@ var Shader = function(vertexId, fragmentId) {
     try {
         this.loadShader(gl.VERTEX_SHADER, vertexId);
         this.loadShader(gl.FRAGMENT_SHADER, fragmentId);
-    } catch (e) {
-        gl.deleteProgram(this._program);
-        // Javascript really needs a rethrow !?
-        throw e;
+        loadShaderSucceeded = true;
+    } finally {
+        // Javascript doesn't have a real rethrow, do this terrible flag based
+        // hack.
+        if (!loadShaderSucceeded)
+            gl.deleteProgram(this._program);
     }
 
     gl.linkProgram(this._program);
@@ -75,11 +78,15 @@ Shader.prototype = {
     },
     makeAttributeFunction: function(name) {
         var loc = gl.getAttribLocation(this._program, name);
-        this._arrays |= 1 << loc;
-        this[name] = function(size, type, normalized, stride,
-                ofs) {
-            this.bind();
-            gl.vertexAttribPointer(loc, size, type, normalized, stride, ofs);
+        if (loc >= 0) {
+            this._arrays |= 1 << loc;
+            this[name] = function(size, type, normalized, stride,
+                    ofs) {
+                this.bind();
+                gl.vertexAttribPointer(loc, size, type, normalized, stride, ofs);
+            }
+        } else {
+            this[name] = function() {};
         }
     },
     makeUniformFunction: function(name, typeName) {
@@ -200,21 +207,22 @@ var draw = function() {
     timeLog.mark('triangulation');
 
     // TODO: These sizes are a bit conservative.
-    // One vertex per edge + one vertex per control point.
-    var data = new Float32Array(7 * 4 * points.length);
-    var di = 0;
+    // One vertex per edge
     // At most one triangle per edge
-    var idx = new Uint16Array(3 * 6 * points.length);
-    var ii = 0;
+    var data = new Float32Array(6 * 4 * points.length),
+        idx = new Uint16Array(3 * 6 * points.length),
+        di = 0,
+        ii = 0;
 
     for (var i = 0, l = points.length; i < l; ++i) {
-        var point = points[i];
-        var anchor = di;
-        var count = 0;
-        var edge = point.edge;
+        var point = points[i],
+            anchor = di,
+            count = 0,
+            edge = point.edge,
+            center;
         do {
             count += 1;
-            var center = edge.face.data.circumcenter();
+            center = edge.face.data.circumcenter();
             data[4 * di + 0] = center[0];
             data[4 * di + 1] = center[1];
             data[4 * di + 2] = point.x;
@@ -233,9 +241,6 @@ var draw = function() {
 
     timeLog.mark('vbo creation');
 
-    // console.log(ii, idx.length);
-    // console.log(4 * di, data.length);
-
     var vbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STREAM_DRAW);
@@ -244,19 +249,15 @@ var draw = function() {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STREAM_DRAW);
 
-    /*
-    var position = gl.getAttribLocation(program, 'position');
-    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 16, 0);
-    gl.enableVertexAttribArray(position);
-    var control_point = gl.getAttribLocation(program, 'control_point');
-    gl.vertexAttribPointer(control_point, 2, gl.FLOAT, false, 16, 8);
-    gl.enableVertexAttribArray(control_point);
-    */
     shader.bind();
     shader.position(2, gl.FLOAT, false, 16, 0);
     shader.control_point(2, gl.FLOAT, false, 16, 8);
     shader.view_transform([1, 0, 0, 1]);
-    shader.inv_width(10.);
+    shader.inv_width(20.);
+    shader.offset(0.1);
+    shader.blur(0.1);
+    shader.tex(0);
+    shader.inv_texture_size(.25);
 
     gl.drawElements(gl.TRIANGLES, ii, gl.UNSIGNED_SHORT, 0);
 
@@ -284,6 +285,34 @@ var main = function() {
       gl = $("#c")[0].getContext('experimental-webgl');
 
     shader = new Shader("halo_vertex", "halo_fragment");
+
+    var texture = gl.createTexture(),
+        textureData = new Uint8Array(4 * 4);
+
+    textureData[0] = 255;
+    textureData[1] = 0;
+    textureData[2] = 0;
+    textureData[3] = 255;
+    textureData[4] = 0;
+    textureData[5] = 255;
+    textureData[6] = 0;
+    textureData[7] = 255;
+    textureData[8] = 0;
+    textureData[9] = 0;
+    textureData[10] = 255;
+    textureData[11] = 255;
+    textureData[12] = 0;
+    textureData[13] = 0;
+    textureData[14] = 0;
+    textureData[15] = 255;
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 4, 1, 0, gl.RGBA,
+        gl.UNSIGNED_BYTE, textureData);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_WRAP_S, gl.REPEAT);
 
     for (var i = 0; i < 20; ++i) {
         points.push(new Vertex(2 * Math.random() - 1, 2 * Math.random() - 1));
