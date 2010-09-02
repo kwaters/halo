@@ -196,7 +196,8 @@ window.TimeLog = TimeLog;
 
 var timeLog = new TimeLog();
 
-var viewMatrix = new Float32Array(4);
+var viewMatrix = new Float32Array(4),
+    pixelSize;
 
 var resize = function() {
     var canvas = document.getElementById("c");
@@ -212,10 +213,15 @@ var resize = function() {
     if (ratio > 1.) {
         viewMatrix[0] = 1.;
         viewMatrix[3] = ratio;
+        pixelSize = 2. / width;
     } else {
         viewMatrix[0] = 1. / ratio;
         viewMatrix[3] = 1.;
+        pixelSize = 2. / height;
     }
+
+    // Anti-aliasing adjustment factor
+    pixelSize *= .7;
 
     // redraw
     setTimeout(draw, 0);
@@ -280,14 +286,16 @@ var draw = function() {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STREAM_DRAW);
 
+    var invWidth = 30.;
+
     shader.bind();
     shader.position(2, gl.FLOAT, false, 16, 0);
     shader.control_point(2, gl.FLOAT, false, 16, 8);
     shader.view_transform(viewMatrix);
-    shader.inv_width(20.);
+    shader.inv_width(invWidth);
     shader.offset(0.1);
     // TODO: compute the right answer for this
-    shader.blur(0.05);
+    shader.blur(invWidth * pixelSize);
     shader.tex(0);
     shader.inv_texture_size(1 / 32.);
 
