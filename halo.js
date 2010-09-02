@@ -424,8 +424,7 @@ Texture.prototype = {
             v2 = Math.random();
         } while (s1 + s2 < .4 && v1 + v2 < .6);
 
-        this.set(makeColorRamp(h1, s1, v1, h2, s2, v2,
-            this.size, count, limit, true))
+        this.set([h1, s1, v1, h2, s2, v2]);
     },
     set: function(ramp) {
         this.last = this.target;
@@ -433,17 +432,13 @@ Texture.prototype = {
     },
     upload: function(alpha) {
         var invAlpha = 1. - alpha,
-            i, l, data;
+            i, l, data, v = [];
 
-        if (alpha < 1.) {
-            data = new Uint8Array(4 * this.size);
-            for (i = 0, l = 4 * this.size; i < l; i++) {
-                data[i] = (invAlpha * this.last[i] + alpha * this.target[i] +
-                    0.5) | 0;
-            }
-        } else {
-            data = this.target;
-        }
+        for (i = 0; i < 6; i++)
+            v.push(invAlpha * this.last[i] + alpha * this.target[i]);
+
+        data = makeColorRamp(v[0], v[1], v[2], v[3], v[4], v[5],
+            this.size, 4, this.size, true);
 
         // this.bind();
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.size, 1,
