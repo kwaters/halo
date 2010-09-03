@@ -203,17 +203,24 @@ window.TimeLog = TimeLog;
 (function() {
 
 var Animator = function(tricks) {
-    this.tricks = tricks
+    this.tricks = tricks;
     this.runningTrick = null;
 }
 Animator.prototype = {
     run: function(now) {
         if (this.runningTrick !== null) {
-            this.runningTrick.run(now);
+            if (this.runningTrick.run(now)) {
+              this.runningTrick = null;
+            }
+        }
+        if (this.runningTrick === null) {
+            var newTrick = (Math.random() * (this.tricks.length - 1) + 0.5) | 0;
+            this.startTrick(now, newTrick);
         }
     },
-    startTrick: function(now, trickName) {
-        this.runningTrick = this.tricks[trickName];
+    startTrick: function(now, trickNum) {
+        console.log('starting trick', trickNum);
+        this.runningTrick = this.tricks[trickNum];
         this.runningTrick.start(now);
     }
 }
@@ -317,69 +324,69 @@ var hsvToRgb = function(hue, saturation, value) {
 }
 window.hsvToRgb = hsvToRgb;
 
-var makeColorRamp = function(h1, s1, v1, h2, s2, v2, size, count, limit,
-    reflect) {
-    var ramp = new Uint8Array(4 * size),
+var makeColorRamp = function(h1, s1, v1, h2, s2, v2, size, count, limit) {
+    var ramp = new Array(3 * size),
         hDiff = h2 - h1,
         sDiff = s2 - s1,
         vDiff = v2 - v1,
         pos = 0,
         posDir = 1,
-        alpha,
+        alpha = 0,
         rgb,
         i;
 
     for (i = 0; i < limit; i++) {
         alpha = pos / (count - 1);
-
-        rgb = hsvToRgb(h1 + alpha * hDiff, s1 + alpha * sDiff,
-            v1 + alpha * vDiff);
-        ramp[4 * i + 0] = rgb[0];
-        ramp[4 * i + 1] = rgb[1];
-        ramp[4 * i + 2] = rgb[2];
-        ramp[4 * i + 3] = 255;
+        ramp[3 * i + 0] = h1 + alpha * hDiff;
+        ramp[3 * i + 1] = s1 + alpha * sDiff;
+        ramp[3 * i + 2] = v1 + alpha * vDiff;
 
         pos += posDir;
         if (pos < 0 || pos >= count) {
-            if (reflect) {
-                posDir = -posDir;
-                pos += 2 * posDir;
-            } else {
-                pos = 0;
-            }
+            posDir = -posDir;
+            pos += 2 * posDir;
         }
     }
     for (; i < size; i++) {
-        ramp[4 * i + 0] = ramp[4 * (limit - 1) + 0];
-        ramp[4 * i + 1] = ramp[4 * (limit - 1) + 1];
-        ramp[4 * i + 2] = ramp[4 * (limit - 1) + 2];
-        ramp[4 * i + 3] = 255;
+        ramp[3 * i + 0] = ramp[3 * (limit - 1) + 0];
+        ramp[3 * i + 1] = ramp[3 * (limit - 1) + 1];
+        ramp[3 * i + 2] = ramp[3 * (limit - 1) + 2];
     }
 
     return ramp;
 }
+window.makeColorRamp = makeColorRamp;
 
 var Texture = function(gl, size) {
     this.gl = gl;
     this.size = size;
+
+    this.count = 8;
+    this.limit = size;
+
+    this.factors = new Array(3 * this.size);
+    for (var i = 0; i < this.size; i++) {
+        this.factors[3 * i + 0] = 0;
+        this.factors[3 * i + 1] = 0;
+        this.factors[3 * i + 2] = 1;
+    }
+
+    this.data = new Uint8Array(4 * size);
+    for (var i = 0; i < this.size; i++)
+        this.data[4 * i + 3] = 255;
+
     this.textureId = this.gl.createTexture();
-    this.target = null;
-    this.last = null;
 
     this.bind();
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-
-    this.make(4, this.size);
-    this.make(4, this.size);
-    this.upload(1.);
 }
 Texture.prototype = {
     bind: function() {
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.textureId);
     },
-    make: function(count, limit) {
+    make: function() {
         var h1, s1, v1, h2, s2, v2;
         do {
             h1 = 2 * Math.random();
@@ -390,28 +397,30 @@ Texture.prototype = {
             v2 = Math.random();
         } while (s1 + s2 < .4 && v1 + v2 < .6);
 
-        this.set([h1, s1, v1, h2, s2, v2]);
-    },
-    set: function(ramp) {
-        this.last = this.target;
-        this.target = ramp;
+        return makeColorRamp(h1, s1, v1, h2, s2, v2,
+            this.size, this.count, this.limit, true);
     },
     upload: function(alpha) {
-        var invAlpha = 1. - alpha,
-            i, l, data, v = [];
+        var i, j, rgb;
 
-        for (i = 0; i < 6; i++)
-            v.push(invAlpha * this.last[i] + alpha * this.target[i]);
+        for (var i = 0; i < this.size; i++) {
+            rgb = hsvToRgb(this.factors[3 * i + 0],
+                this.factors[3 * i + 1], this.factors[3 * i + 2]);
+            for (var j = 0; j < this.size; j++) {
+                this.data[4 * i + 0] = rgb[0];
+                this.data[4 * i + 1] = rgb[1];
+                this.data[4 * i + 2] = rgb[2];
+            }
+        }
 
-        data = makeColorRamp(v[0], v[1], v[2], v[3], v[4], v[5],
-            this.size, 8, this.size, true);
-
-        // this.bind();
+        this.bind();
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.size, 1,
-            0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, data);
+            0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, this.data);
     }
 }
 window.Texture = Texture;
+
+var frost = 0;
 
 })();
 
@@ -447,6 +456,59 @@ var makeMovePoints = function(halo) {
     }
 }
 
+var makeChangeOffset = function(halo) {
+    return function(trick) {
+        trick.animate(halo, 'offset', halo.offset + 25, 0, 3000);
+        trick.animate(halo, 'offset', halo.offset, 3000, 6000);
+    }
+}
+
+var makeLimitOut = function(halo) {
+    return function(trick) {
+        var nvs = makeColorRamp(0, 0, 0, 0, 0, 1,
+            halo.texture.size, 2, 2);
+        for (var i = 0; i < 3 * halo.texture.size; ++i) {
+            trick.animate(halo.texture.factors, i, nvs[i], 0, 1000);
+        }
+        var nvs = makeColorRamp(0, 0, 0, 0, 0, 1,
+            halo.texture.size, 2, halo.texture.size);
+        for (var i = 2; i < halo.texture.size; i += 2) {
+            for (var j = 0; j < 6; j++) {
+                trick.animate(halo.texture.factors, 3 * i + j, nvs[3 * i + j],
+                    1500 + i * 150, 1501 + i * 150);
+            }
+        }
+    }
+}
+
+var makeLimitIn = function(halo) {
+    return function(trick) {
+        for (var i = 0; i < halo.texture.size; i++) {
+            halo.texture.factors[3 * i + 0] = 0;
+            halo.texture.factors[3 * i + 1] = 0;
+            halo.texture.factors[3 * i + 2] = 1;
+        }
+        var nvs = halo.texture.make(),
+            t = 0;
+        for (var i = halo.texture.size - 1; i >= 0; i -= 1) {
+            for (var j = 0; j < 3; j++) {
+                trick.animate(halo.texture.factors, 3 * i + j, nvs[3 * i + j],
+                    t, t + 1);
+            }
+            t += 200;
+        }
+    }
+}
+
+var makeBlendColors = function(halo) {
+    return function(trick) {
+        var nvs = halo.texture.make();
+        for (var i = 0; i < 3 * halo.texture.size; i++) {
+            trick.animate(halo.texture.factors, i, nvs[i], 0, 2000);
+        }
+    }
+}
+
 var Halo = function() {
     this.viewMatrix = new Float32Array(4);
     this.pixelSize = 1.;
@@ -460,7 +522,6 @@ var Halo = function() {
     this.vbo = gl.createBuffer();
     this.ibo = gl.createBuffer();
 
-
     this.points = []
     for (var i = 0; i < 20; ++i) {
         // x, y
@@ -468,7 +529,14 @@ var Halo = function() {
         this.points.push(2 * Math.random() - 1);
     }
 
-    this.trick = new Trick(makeMovePoints(this));
+    this.animator = new Animator([
+        new Trick(makeMovePoints(this)),
+        new Trick(makeChangeOffset(this)),
+        new Trick(makeLimitOut(this)),
+        // new Trick(makeLimitIn(this)),
+        new Trick(makeBlendColors(this))
+    ]);
+    this.animator.startTrick(new Date().getTime(), 2);
 
     var me = this;
     this.drawClosure = function() { me.draw(); }
@@ -504,8 +572,7 @@ Halo.prototype = {
 
         this.timeLog.start();
 
-        if (this.trick.run(new Date().getTime()))
-            this.trick.start(new Date().getTime());
+        this.animator.run(new Date().getTime());
         this.timeLog.mark('animation');
 
         var verts = [];
@@ -555,6 +622,7 @@ Halo.prototype = {
 
         gl.activeTexture(gl.TEXTURE0);
         this.texture.bind();
+        this.texture.upload();
         this.timeLog.mark('texture');
 
         this.shader.bind();
