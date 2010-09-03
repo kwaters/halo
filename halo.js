@@ -1,6 +1,8 @@
 
 var gl = null;
 
+//////////////////////////////////////////////////////////////////////////////
+// Shader sub-module
 (function() {
 
 // static "class members" for vertex array and shader tracking.
@@ -83,7 +85,8 @@ Shader.prototype = {
             this[name] = function(size, type, normalized, stride,
                     ofs) {
                 this.bind();
-                gl.vertexAttribPointer(loc, size, type, normalized, stride, ofs);
+                gl.vertexAttribPointer(loc, size, type, normalized, stride,
+                    ofs);
             }
         } else {
             this[name] = function() {};
@@ -140,11 +143,13 @@ Shader.prototype = {
         gl.deleteProgram(this._program);
     }
 }
-
 window.Shader = Shader;
 
 })();
 
+
+//////////////////////////////////////////////////////////////////////////////
+// Time Log sub-module
 (function(window) {
 
 var TimeLog = function() {
@@ -192,6 +197,9 @@ window.TimeLog = TimeLog;
 
 })(window);
 
+
+//////////////////////////////////////////////////////////////////////////////
+// Animation sub-module
 (function() {
 
 var Animator = function(tricks) {
@@ -209,6 +217,7 @@ Animator.prototype = {
         this.runningTrick.start(now);
     }
 }
+window.Animator = Animator;
 
 var Trick = function(actions) {
     this.actions = actions;
@@ -237,6 +246,7 @@ Trick.prototype = {
         this.animations.push(animation);
     }
 }
+window.Trick = Trick;
 
 var Animation = function(obj, property, value, start, stop) {
     this.obj = obj;
@@ -270,133 +280,12 @@ Animation.prototype = {
     }
 }
 
-window.Trick = Trick;
-window.Animator = Animator;
-
 })();
 
+
+//////////////////////////////////////////////////////////////////////////////
+// Texture sub-module
 (function() {
-
-var timeLog = new TimeLog();
-
-var viewMatrix = new Float32Array(4),
-    pixelSize;
-
-var resize = function() {
-    var canvas = document.getElementById("c");
-        width = canvas.clientWidth,
-        height = canvas.clientHeight,
-        ratio = width / height;
-    canvas.width = width;
-    canvas.height = height;
-
-    gl.viewport(0, 0, width, height);
-
-    viewMatrix[1] = viewMatrix[2] = 0.;
-    if (ratio > 1.) {
-        viewMatrix[0] = 1.;
-        viewMatrix[3] = ratio;
-        pixelSize = 2. / width;
-    } else {
-        viewMatrix[0] = 1. / ratio;
-        viewMatrix[3] = 1.;
-        pixelSize = 2. / height;
-    }
-
-    // Anti-aliasing adjustment factor
-    pixelSize *= .7;
-
-    // redraw
-    setTimeout(draw, 0);
-}
-
-var tick = new Date().getTime();
-
-var draw = function() {
-    if (timeLog.running()) {
-        timeLog.mark('browser');
-        if (timeLog.samples() >= 200) {
-            // timeLog.log();
-            timeLog.reset();
-            // clearInterval(interval);
-        }
-    }
-
-    timeLog.start();
-
-    if (trick.run(new Date().getTime()))
-        trick.start(new Date().getTime());
-
-    timeLog.mark('animation');
-
-    var verts = [];
-    for (var i = 0; i < points.length; i += 2)
-        verts.push(new Vertex(points[i], points[i + 1]));
-    var tri = triangulate(verts, 1.2);
-
-    timeLog.mark('triangulation');
-
-    // TODO: These sizes are a bit conservative.
-    // One vertex per edge
-    // At most one triangle per edge
-    var data = new Float32Array(6 * 4 * verts.length),
-        idx = new Uint16Array(3 * 6 * verts.length),
-        di = 0,
-        ii = 0;
-
-    for (var i = 0, l = verts.length; i < l; ++i) {
-        var point = verts[i],
-            anchor = di,
-            count = 0,
-            edge = point.edge,
-            center;
-        do {
-            count += 1;
-            center = edge.face.data.circumcenter();
-            data[4 * di + 0] = center[0];
-            data[4 * di + 1] = center[1];
-            data[4 * di + 2] = point.x;
-            data[4 * di + 3] = point.y;
-            ++di;
-
-            edge = edge.twin.next;
-        } while (edge !== point.edge);
-
-        for (j = 1; j < count - 1; ++j) {
-            idx[ii++] = anchor;
-            idx[ii++] = anchor + j;
-            idx[ii++] = anchor + j + 1;
-        }
-    }
-
-    timeLog.mark('vbo creation');
-
-    var vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STREAM_DRAW);
-
-    var ibo = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STREAM_DRAW);
-
-    timeLog.mark('texture');
-
-    var invWidth = 30.;
-
-    shader.bind();
-    shader.position(2, gl.FLOAT, false, 16, 0);
-    shader.control_point(2, gl.FLOAT, false, 16, 8);
-    shader.view_transform(viewMatrix);
-    shader.inv_width(invWidth);
-    shader.offset(0.1);
-    shader.blur(invWidth * pixelSize);
-    shader.tex(0);
-    shader.inv_texture_size(1 / 32.);
-
-    gl.drawElements(gl.TRIANGLES, ii, gl.UNSIGNED_SHORT, 0);
-
-    timeLog.mark('draw');
-}
 
 var mod = function(x, y) {
     return x - Math.floor( x / y) * y;
@@ -427,11 +316,6 @@ var hsvToRgb = function(hue, saturation, value) {
     return rgb
 }
 window.hsvToRgb = hsvToRgb;
-
-var points = [],
-    shader,
-    texture,
-    interval;
 
 var makeColorRamp = function(h1, s1, v1, h2, s2, v2, size, count, limit,
     reflect) {
@@ -520,81 +404,212 @@ Texture.prototype = {
             v.push(invAlpha * this.last[i] + alpha * this.target[i]);
 
         data = makeColorRamp(v[0], v[1], v[2], v[3], v[4], v[5],
-            this.size, 4, this.size, true);
+            this.size, 8, this.size, true);
 
         // this.bind();
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.size, 1,
             0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, data);
     }
 }
+window.Texture = Texture;
 
-var trick;
+})();
 
-var initAnimations = function() {
-}
 
-var main = function() {
-    gl = $("#c")[0].getContext('webgl');
-    if (!gl)
-      gl = $("#c")[0].getContext('experimental-webgl');
-    $(window).resize(resize);
-    resize();
+//////////////////////////////////////////////////////////////////////////////
+// Halo sub-module
 
-    shader = new Shader("halo_vertex", "halo_fragment");
-    console.log('main', gl);
+(function() {
 
-    texture = new Texture(gl, 32);
-    gl.activeTexture(gl.TEXTURE0);
-    texture.bind();
-    console.log(texture);
-
-    points = []
-    for (var i = 0; i < 20; ++i) {
-        // x, y
-        points.push(2 * Math.random() - 1);
-        points.push(2 * Math.random() - 1);
-    }
-
-    /*
-    trick = new Trick(function(trick) {
-        trick.animate(points, 0, -.8,    0, 3000);
-        trick.animate(points, 1, -.8,    0, 3000);
-        trick.animate(points, 0,  .8, 3000, 6000);
-        trick.animate(points, 0,  0., 6000, 9000);
-        trick.animate(points, 1,  .8, 6000, 9000);
-    });
-    trick.start(new Date().getTime());
-    */
-
-    var movePoints = new Trick(function(trick) {
-        for (var i = 0, l = points.length; i < l; i++) {
+var makeMovePoints = function(halo) {
+    return function(trick) {
+        for (var i = 0, l = halo.points.length; i < l; i++) {
             var cuts = [];
             for (var j = 0; j < 6; j++) {
                 cuts.push(10000. * Math.random());
             }
             cuts.sort(function(a, b) { return a - b; });
 
-            var max = .1 + 1. / viewMatrix[3 * (i & 1)],
+            var max = .1 + 1. / halo.viewMatrix[3 * (i & 1)],
                 min = -max;
 
-            var cv = points[i];
+            var cv = halo.points[i];
             for (var j = 1, m = cuts.length; j < m; j++) {
                 var length = Math.min(1., (cuts[j] - cuts[j - 1]) / 4000.),
-                    v = cv + length * (2 * Math.random() - 1);
-                v = Math.min(max, Math.max(min, v));
+                    low = Math.max(min, cv - length),
+                    high = Math.min(max, cv + length),
+                    v = Math.random() * (high - low) + low;
                 cv = v;
 
-                trick.animate(points, i, v, cuts[j - 1], cuts[j]);
+                trick.animate(halo.points, i, v, cuts[j - 1], cuts[j]);
             }
         }
-    });
-    trick = movePoints;
-
-    timeLog.reset();
-    interval = setInterval(draw, 0);
+    }
 }
 
+var Halo = function() {
+    this.viewMatrix = new Float32Array(4);
+    this.pixelSize = 1.;
+    this.timeLog = new TimeLog();
+    this.invWidth = 35.;
+    this.offset = 0.1;
+    this.shader = new Shader("halo_vertex", "halo_fragment");
 
+    this.texture = new Texture(gl, 32);
+
+    this.vbo = gl.createBuffer();
+    this.ibo = gl.createBuffer();
+
+
+    this.points = []
+    for (var i = 0; i < 20; ++i) {
+        // x, y
+        this.points.push(2 * Math.random() - 1);
+        this.points.push(2 * Math.random() - 1);
+    }
+
+    this.trick = new Trick(makeMovePoints(this));
+
+    var me = this;
+    this.drawClosure = function() { me.draw(); }
+}
+Halo.prototype = {
+    resize: function(width, height) {
+        gl.viewport(0, 0, width, height);
+
+        var ratio = width / height;
+        this.viewMatrix[1] = this.viewMatrix[2] = 0.;
+        if (ratio > 1.) {
+            this.viewMatrix[0] = 1.;
+            this.viewMatrix[3] = ratio;
+            this.pixelSize = 2. / width;
+        } else {
+            this.viewMatrix[0] = 1. / ratio;
+            this.viewMatrix[3] = 1.;
+            this.pixelSize = 2. / height;
+        }
+
+        // Anti-aliasing adjustment factor
+        this.pixelSize *= .7;
+    },
+    draw: function() {
+        if (this.timeLog.running()) {
+            this.timeLog.mark('browser');
+            if (this.timeLog.samples() >= 200) {
+                this.timeLog.log();
+                this.timeLog.reset();
+                // clearInterval(interval);
+            }
+        }
+
+        this.timeLog.start();
+
+        if (this.trick.run(new Date().getTime()))
+            this.trick.start(new Date().getTime());
+        this.timeLog.mark('animation');
+
+        var verts = [];
+        for (var i = 0; i < this.points.length; i += 2)
+            verts.push(new Vertex(this.points[i], this.points[i + 1]));
+        var tri = triangulate(verts, 1.2);
+        this.timeLog.mark('triangulation');
+
+        // TODO: These sizes are a bit conservative.
+        // One vertex per edge
+        // At most one triangle per edge
+        var data = new Float32Array(6 * 4 * verts.length),
+            idx = new Uint16Array(3 * 6 * verts.length),
+            di = 0,
+            ii = 0;
+
+        for (var i = 0, l = verts.length; i < l; ++i) {
+            var point = verts[i],
+                anchor = di,
+                count = 0,
+                edge = point.edge,
+                center;
+            do {
+                count += 1;
+                center = edge.face.data.circumcenter();
+                data[4 * di + 0] = center[0];
+                data[4 * di + 1] = center[1];
+                data[4 * di + 2] = point.x;
+                data[4 * di + 3] = point.y;
+                ++di;
+
+                edge = edge.twin.next;
+            } while (edge !== point.edge);
+
+            for (j = 1; j < count - 1; ++j) {
+                idx[ii++] = anchor;
+                idx[ii++] = anchor + j;
+                idx[ii++] = anchor + j + 1;
+            }
+        }
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STREAM_DRAW);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STREAM_DRAW);
+        this.timeLog.mark('vbo');
+
+        gl.activeTexture(gl.TEXTURE0);
+        this.texture.bind();
+        this.timeLog.mark('texture');
+
+        this.shader.bind();
+        this.shader.position(2, gl.FLOAT, false, 16, 0);
+        this.shader.control_point(2, gl.FLOAT, false, 16, 8);
+        this.shader.view_transform(this.viewMatrix);
+        this.shader.inv_width(this.invWidth);
+        this.shader.offset(this.offset);
+        this.shader.blur(this.invWidth * this.pixelSize);
+        this.shader.tex(0);
+        this.shader.inv_texture_size(1 / 32.);
+
+        gl.drawElements(gl.TRIANGLES, ii, gl.UNSIGNED_SHORT, 0);
+        this.timeLog.mark('draw');
+    }
+};
+window.Halo = Halo;
+
+})();
+
+
+//////////////////////////////////////////////////////////////////////////////
+// Main
+//
+// This is the only module that should interact with the DOM
+
+(function() {
+
+var halo;
+
+var resize = function() {
+    var canvas = document.getElementById("c");
+        width = canvas.clientWidth,
+        height = canvas.clientHeight;
+    canvas.width = width;
+    canvas.height = height;
+
+    halo.resize(width, height);
+
+    // redraw
+    window.setTimeout(halo.drawClosure, 0);
+}
+
+var main = function() {
+    gl = $("#c")[0].getContext('webgl');
+    if (!gl)
+      gl = $("#c")[0].getContext('experimental-webgl');
+
+    halo = new Halo();
+
+    $(window).resize(resize);
+    resize();
+
+    interval = window.setInterval(halo.drawClosure, 0);
+}
 $(document).ready(main);
 
 })();
