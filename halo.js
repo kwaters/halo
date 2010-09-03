@@ -194,6 +194,117 @@ window.TimeLog = TimeLog;
 
 (function() {
 
+var Animator = function(tricks) {
+    this.tricks = tricks
+    this.runningTrick = null;
+}
+Animator.prototype = {
+    run: function(now) {
+        if (this.runningTrick !== null) {
+            this.runningTrick.run(now);
+        }
+    },
+    startTrick: function(now, trickName) {
+        this.runningTrick = this.tricks[trickName];
+        this.runningTrick.start(now);
+    }
+}
+
+var Trick = function(delay, actions) {
+    this.delay = delay;
+    this.actions = actions;
+    this.ats = [];
+    this.startTime = 0;
+
+    var me = this;
+    this.atFunction = function(when, action) {
+        console.log('at');
+        me.ats.push(new At(when, action));
+    }
+}
+Trick.prototype = {
+    start: function(now) {
+        this.startTime = now;
+        this.ats = [];
+        this.actions(this.atFunction);
+    },
+    run: function(now) {
+        now -= this.startTime;
+        var allDone = true;
+
+        for (var i = 0; i < this.ats.length; i++) {
+            var at = this.ats[i];
+            if (at.state == 0 && now >= at.when) {
+                at.action(function(a, i, value, time) {
+                    at.animations.push(new Animation(a, i, value, at.when,
+                        at.when + time));
+                }, now);
+                at.state = 1;
+                allDone = false;
+            }
+            // We want to run the animations when we activate them.
+            if (at.state == 1) {
+                var atDone = true;
+                for (var j = 0; j < at.animations.length; j++) {
+                    atDone = atDone && at.animations[j].run(now);
+                }
+                if (atDone)
+                    at.state = 2;
+                allDone = allDone && atDone;
+            }
+        }
+
+        if (allDone)
+            this.ats = [];
+        return allDone;
+    }
+}
+
+var animate = function(a, i, value, time) {
+    return function(animate, now) {
+        console.log('starting animation');
+        animate(a, i, value, time);
+    }
+}
+
+var Animation = function(a, i, value, start, stop) {
+    this.a = a;
+    this.i = i;
+    this.left = a[i];
+    this.right = value;
+    this.start = start;
+    this.stop = stop;
+}
+Animation.prototype = {
+    run: function(now) {
+        var alpha = (now - this.start) / (this.stop - this.start),
+            done = false;
+        if (alpha < 0.) {
+            alpha = 0;
+        } else if (alpha > 1.) {
+            alpha = 1;
+            done = true;
+        }
+        this.a[this.i] = alpha * (this.right - this.left) + this.left;
+        return done;
+    }
+}
+
+var At = function(when, action) {
+    this.when = when;
+    this.action = action;
+    this.state = 0;
+    this.animations = [];
+}
+
+window.Trick = Trick;
+window.animate = animate;
+window.Animator = Animator;
+
+})();
+
+(function() {
+
 var timeLog = new TimeLog();
 
 var viewMatrix = new Float32Array(4),
@@ -241,20 +352,27 @@ var draw = function() {
 
     timeLog.start();
 
-    var tri = triangulate(points, 1);
+    trick.run(new Date().getTime());
+
+    timeLog.mark('animation');
+
+    var verts = [];
+    for (var i = 0; i < points.length; i += 2)
+        verts.push(new Vertex(points[i], points[i + 1]));
+    var tri = triangulate(verts, 1.2);
 
     timeLog.mark('triangulation');
 
     // TODO: These sizes are a bit conservative.
     // One vertex per edge
     // At most one triangle per edge
-    var data = new Float32Array(6 * 4 * points.length),
-        idx = new Uint16Array(3 * 6 * points.length),
+    var data = new Float32Array(6 * 4 * verts.length),
+        idx = new Uint16Array(3 * 6 * verts.length),
         di = 0,
         ii = 0;
 
-    for (var i = 0, l = points.length; i < l; ++i) {
-        var point = points[i],
+    for (var i = 0, l = verts.length; i < l; ++i) {
+        var point = verts[i],
             anchor = di,
             count = 0,
             edge = point.edge,
@@ -288,6 +406,7 @@ var draw = function() {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STREAM_DRAW);
 
+/*
     var tock = new Date().getTime(),
         alpha = (tock - tick) / 5000.;
     if (alpha > 1.) {
@@ -296,6 +415,7 @@ var draw = function() {
         alpha = 0.;
     }
     texture.upload(alpha);
+    */
 
     timeLog.mark('texture');
 
@@ -446,6 +566,20 @@ Texture.prototype = {
     }
 }
 
+var trick;
+
+var initAnimations = function() {
+}
+
+var pointAnimate = function(points, i, time) {
+    return function(animate, now) {
+        var length = Math.min(1., time / 5000);
+        var v = points[i] + (2 * Math.random() - 1) * length;
+        var newV = Math.min(1.2, Math.max(-1.2, v));
+        animate(points, i, newV, time);
+    };
+}
+
 var main = function() {
     gl = $("#c")[0].getContext('webgl');
     if (!gl)
@@ -461,10 +595,36 @@ var main = function() {
     texture.bind();
     console.log(texture);
 
+    points = []
     for (var i = 0; i < 20; ++i) {
-        points.push(new Vertex(2 * Math.random() - 1, 2 * Math.random() - 1));
+        // x, y
+        points.push(2 * Math.random() - 1);
+        points.push(2 * Math.random() - 1);
     }
 
+    trick = new Trick(0, function(at) {
+        at(0, animate(points, 0, -.8, 3000));
+        at(0, animate(points, 1, -.8, 3000));
+        at(3000, animate(points, 0,  .8, 3000));
+        at(6000, animate(points, 0, 0., 3000));
+        at(6000, animate(points, 1, .8, 3000));
+    });
+    trick.start(new Date().getTime());
+
+    var animator = new Animator({
+        movePoints: new Trick(0, function(at) {
+            for (i = 0; i < points.length; ++i) {
+                var cuts = [0, Math.random(), Math.random(), Math.random(),
+                    Math.random()];
+                cuts.sort();
+                for (j = 1; j < cuts.length; j++)
+                    at(10000 * cuts[j - 1], pointAnimate(points, i,
+                        10000 * (cuts[j] - cuts[j - 1])));
+            }
+        })
+    });
+    trick = animator.tricks['movePoints']
+    trick.start(new Date().getTime());
 
     timeLog.reset();
     interval = setInterval(draw, 0);
