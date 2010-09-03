@@ -210,95 +210,67 @@ Animator.prototype = {
     }
 }
 
-var Trick = function(delay, actions) {
-    this.delay = delay;
+var Trick = function(actions) {
     this.actions = actions;
-    this.ats = [];
+    this.animations = [];
     this.startTime = 0;
-
-    var me = this;
-    this.atFunction = function(when, action) {
-        console.log('at');
-        me.ats.push(new At(when, action));
-    }
 }
 Trick.prototype = {
     start: function(now) {
         this.startTime = now;
-        this.ats = [];
-        this.actions(this.atFunction);
+        this.animations = [];
+        this.actions(this);
     },
     run: function(now) {
-        now -= this.startTime;
-        var allDone = true;
+        var done = true,
+            time = now - this.startTime;
 
-        for (var i = 0; i < this.ats.length; i++) {
-            var at = this.ats[i];
-            if (at.state == 0 && now >= at.when) {
-                at.action(function(a, i, value, time) {
-                    at.animations.push(new Animation(a, i, value, at.when,
-                        at.when + time));
-                }, now);
-                at.state = 1;
-                allDone = false;
-            }
-            // We want to run the animations when we activate them.
-            if (at.state == 1) {
-                var atDone = true;
-                for (var j = 0; j < at.animations.length; j++) {
-                    atDone = atDone && at.animations[j].run(now);
-                }
-                if (atDone)
-                    at.state = 2;
-                allDone = allDone && atDone;
-            }
+        for (var i = 0, l = this.animations.length; i < l; i++) {
+            done = this.animations[i].run(time) && done;
         }
-
-        if (allDone)
-            this.ats = [];
-        return allDone;
+        if (done)
+            this.animations = [];
+        return done;
+    },
+    animate: function(obj, property, value, start, stop) {
+        var animation = new Animation(obj, property, value, start, stop);
+        this.animations.push(animation);
     }
 }
 
-var animate = function(a, i, value, time) {
-    return function(animate, now) {
-        console.log('starting animation');
-        animate(a, i, value, time);
-    }
-}
-
-var Animation = function(a, i, value, start, stop) {
-    this.a = a;
-    this.i = i;
-    this.left = a[i];
+var Animation = function(obj, property, value, start, stop) {
+    this.obj = obj;
+    this.property = property;
     this.right = value;
     this.start = start;
     this.stop = stop;
+    this.state = 0;
 }
 Animation.prototype = {
     run: function(now) {
-        var alpha = (now - this.start) / (this.stop - this.start),
-            done = false;
-        if (alpha < 0.) {
-            alpha = 0;
-        } else if (alpha > 1.) {
-            alpha = 1;
-            done = true;
+        if (this.state == 0 && now >= this.start) {
+            this.state = 1;
+            this.left = this.obj[this.property];
         }
-        this.a[this.i] = alpha * (this.right - this.left) + this.left;
-        return done;
+        if (this.state == 1) {
+            var alpha = (now - this.start) / (this.stop - this.start);
+            if (alpha < 0.) {
+                alpha = 0;
+            } else if (alpha > 1.) {
+                alpha = 1;
+                this.state = 2;
+            }
+            this.obj[this.property] = alpha * (this.right - this.left) +
+                this.left;
+        }
+        if (this.obj[this.property] === undefined) {
+            console.log(this);
+        }
+        return this.state == 2;
     }
 }
 
-var At = function(when, action) {
-    this.when = when;
-    this.action = action;
-    this.state = 0;
-    this.animations = [];
-}
-
 window.Trick = Trick;
-window.animate = animate;
 window.Animator = Animator;
 
 })();
@@ -343,7 +315,7 @@ var tick = new Date().getTime();
 var draw = function() {
     if (timeLog.running()) {
         timeLog.mark('browser');
-        if (timeLog.samples() >= 20) {
+        if (timeLog.samples() >= 200) {
             // timeLog.log();
             timeLog.reset();
             // clearInterval(interval);
@@ -352,7 +324,8 @@ var draw = function() {
 
     timeLog.start();
 
-    trick.run(new Date().getTime());
+    if (trick.run(new Date().getTime()))
+        trick.start(new Date().getTime());
 
     timeLog.mark('animation');
 
@@ -405,17 +378,6 @@ var draw = function() {
     var ibo = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STREAM_DRAW);
-
-/*
-    var tock = new Date().getTime(),
-        alpha = (tock - tick) / 5000.;
-    if (alpha > 1.) {
-        tick = tock;
-        texture.make(4, texture.size);
-        alpha = 0.;
-    }
-    texture.upload(alpha);
-    */
 
     timeLog.mark('texture');
 
@@ -571,15 +533,6 @@ var trick;
 var initAnimations = function() {
 }
 
-var pointAnimate = function(points, i, time) {
-    return function(animate, now) {
-        var length = Math.min(1., time / 5000);
-        var v = points[i] + (2 * Math.random() - 1) * length;
-        var newV = Math.min(1.2, Math.max(-1.2, v));
-        animate(points, i, newV, time);
-    };
-}
-
 var main = function() {
     gl = $("#c")[0].getContext('webgl');
     if (!gl)
@@ -602,29 +555,40 @@ var main = function() {
         points.push(2 * Math.random() - 1);
     }
 
-    trick = new Trick(0, function(at) {
-        at(0, animate(points, 0, -.8, 3000));
-        at(0, animate(points, 1, -.8, 3000));
-        at(3000, animate(points, 0,  .8, 3000));
-        at(6000, animate(points, 0, 0., 3000));
-        at(6000, animate(points, 1, .8, 3000));
+    /*
+    trick = new Trick(function(trick) {
+        trick.animate(points, 0, -.8,    0, 3000);
+        trick.animate(points, 1, -.8,    0, 3000);
+        trick.animate(points, 0,  .8, 3000, 6000);
+        trick.animate(points, 0,  0., 6000, 9000);
+        trick.animate(points, 1,  .8, 6000, 9000);
     });
     trick.start(new Date().getTime());
+    */
 
-    var animator = new Animator({
-        movePoints: new Trick(0, function(at) {
-            for (i = 0; i < points.length; ++i) {
-                var cuts = [0, Math.random(), Math.random(), Math.random(),
-                    Math.random()];
-                cuts.sort();
-                for (j = 1; j < cuts.length; j++)
-                    at(10000 * cuts[j - 1], pointAnimate(points, i,
-                        10000 * (cuts[j] - cuts[j - 1])));
+    var movePoints = new Trick(function(trick) {
+        for (var i = 0, l = points.length; i < l; i++) {
+            var cuts = [];
+            for (var j = 0; j < 6; j++) {
+                cuts.push(10000. * Math.random());
             }
-        })
+            cuts.sort(function(a, b) { return a - b; });
+
+            var max = .1 + 1. / viewMatrix[3 * (i & 1)],
+                min = -max;
+
+            var cv = points[i];
+            for (var j = 1, m = cuts.length; j < m; j++) {
+                var length = Math.min(1., (cuts[j] - cuts[j - 1]) / 4000.),
+                    v = cv + length * (2 * Math.random() - 1);
+                v = Math.min(max, Math.max(min, v));
+                cv = v;
+
+                trick.animate(points, i, v, cuts[j - 1], cuts[j]);
+            }
+        }
     });
-    trick = animator.tricks['movePoints']
-    trick.start(new Date().getTime());
+    trick = movePoints;
 
     timeLog.reset();
     interval = setInterval(draw, 0);
