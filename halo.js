@@ -202,34 +202,73 @@ window.TimeLog = TimeLog;
 // Animation sub-module
 (function() {
 
+var range = function(low, high) {
+    return (Math.random() * (high - low) + low) | 0;
+}
+
 var Animator = function(tricks) {
     this.tricks = tricks;
-    this.runningTrick = null;
+    this.running = [];
+    this.next = 0;
+
+    this.trickList = []
+    for (trick in tricks) {
+        this.running.push(false);
+        this.trickList.push(trick);
+    }
 }
 Animator.prototype = {
     run: function(now) {
-        if (this.runningTrick !== null) {
-            if (this.runningTrick.run(now)) {
-              this.runningTrick = null;
+        var running = false;
+        for (var i = 0, l = this.trickList.length; i < l; i++) {
+            if (this.running[i]) {
+                if (this.tricks[this.trickList[i]].run(now)) {
+                    this.running[i] = false;
+                } else {
+                    running = true;
+                }
             }
         }
-        if (this.runningTrick === null) {
-            var newTrick = (Math.random() * (this.tricks.length - 1) + 0.5) | 0;
-            this.startTrick(now, newTrick);
+
+        // TODO: work on startup mess
+        /*
+        if (this.next < now) {
+            this.next = now + range(3000, 15000);
+            this.startTrick(now);
         }
+
+        if (!running)
+            this.startTrick(now);
+        */
+        this.startTrick(now);
     },
     startTrick: function(now, trickNum) {
-        console.log('starting trick', trickNum);
-        this.runningTrick = this.tricks[trickNum];
-        this.runningTrick.start(now);
+        if (trickNum === undefined) {
+            var tries = 10;
+            do {
+                trickNum = (Math.random() * (this.trickList.length - 1) + 0.5) | 0;
+                trick = this.tricks[this.trickList[trickNum]];
+            } while ((this.running[trickNum] == true ||
+                !trick.runnable(now)) &&
+                --tries > 0);
+            if (tries <= 0)
+                return;
+        }
+        trick = this.tricks[this.trickList[trickNum]];
+
+        console.log('starting trick', this.trickList[trickNum]);
+        this.running[trickNum] = true;
+        trick.start(now);
     }
 }
 window.Animator = Animator;
 
-var Trick = function(actions) {
+var Trick = function(actions, conflicts) {
     this.actions = actions;
+    this.conflict = [];
     this.animations = [];
     this.startTime = 0;
+    this.cooldownTime = 0;
 }
 Trick.prototype = {
     start: function(now) {
@@ -248,9 +287,18 @@ Trick.prototype = {
             this.animations = [];
         return done;
     },
+    runnable: function(now) {
+        return now > this.cooldownTime;
+    },
     animate: function(obj, property, value, start, stop) {
         var animation = new Animation(obj, property, value, start, stop);
         this.animations.push(animation);
+    },
+    cooldown: function(when) {
+        this.cooldownTime = this.startTime + range(when, 3 * when);
+        if (Math.random < .3) {
+            this.cooldownTiem += range(10000, 20000);
+        }
     }
 }
 window.Trick = Trick;
@@ -453,13 +501,23 @@ var makeMovePoints = function(halo) {
                 trick.animate(halo.points, i, v, cuts[j - 1], cuts[j]);
             }
         }
+        trick.cooldown(0);
     }
 }
 
 var makeChangeOffset = function(halo) {
     return function(trick) {
-        trick.animate(halo, 'offset', halo.offset + 25, 0, 3000);
+        trick.animate(halo, 'offset', halo.offset + 10, 0, 3000);
         trick.animate(halo, 'offset', halo.offset, 3000, 6000);
+        trick.cooldown(4000);
+    }
+}
+
+var makeChangeWidth = function(halo) {
+    return function(trick) {
+        var width = 10 + 60 * Math.random();
+        trick.animate(halo, 'invWidth', width, 0, 4000);
+        trick.cooldown(10000);
     }
 }
 
@@ -478,18 +536,19 @@ var makeLimitOut = function(halo) {
                     1500 + i * 150, 1501 + i * 150);
             }
         }
+        trick.cooldown(10000);
     }
 }
 
 var makeLimitIn = function(halo) {
     return function(trick) {
         for (var i = 0; i < halo.texture.size; i++) {
-            halo.texture.factors[3 * i + 0] = 0;
-            halo.texture.factors[3 * i + 1] = 0;
-            halo.texture.factors[3 * i + 2] = 1;
+            trick.animate(halo.texture.factors, 3 * i + 0, 0, 0, 1000);
+            trick.animate(halo.texture.factors, 3 * i + 1, 0, 0, 1000);
+            trick.animate(halo.texture.factors, 3 * i + 2, 1, 0, 1000);
         }
         var nvs = halo.texture.make(),
-            t = 0;
+            t = 1000;
         for (var i = halo.texture.size - 1; i >= 0; i -= 1) {
             for (var j = 0; j < 3; j++) {
                 trick.animate(halo.texture.factors, 3 * i + j, nvs[3 * i + j],
@@ -497,6 +556,7 @@ var makeLimitIn = function(halo) {
             }
             t += 200;
         }
+        trick.cooldown(10000);
     }
 }
 
@@ -506,6 +566,7 @@ var makeBlendColors = function(halo) {
         for (var i = 0; i < 3 * halo.texture.size; i++) {
             trick.animate(halo.texture.factors, i, nvs[i], 0, 2000);
         }
+        trick.cooldown(2000);
     }
 }
 
@@ -529,13 +590,14 @@ var Halo = function() {
         this.points.push(2 * Math.random() - 1);
     }
 
-    this.animator = new Animator([
-        new Trick(makeMovePoints(this)),
-        new Trick(makeChangeOffset(this)),
-        new Trick(makeLimitOut(this)),
-        // new Trick(makeLimitIn(this)),
-        new Trick(makeBlendColors(this))
-    ]);
+    this.animator = new Animator({
+        'movePoints': new Trick(makeMovePoints(this)),
+        'changeOffset': new Trick(makeChangeOffset(this)),
+        'limitOut': new Trick(makeLimitOut(this)),
+        'limitIn': new Trick(makeLimitIn(this)),
+        'blendColors': new Trick(makeBlendColors(this)),
+        'changeWidth': new Trick(makeChangeWidth(this))
+    });
     this.animator.startTrick(new Date().getTime(), 2);
 
     var me = this;
@@ -564,7 +626,7 @@ Halo.prototype = {
         if (this.timeLog.running()) {
             this.timeLog.mark('browser');
             if (this.timeLog.samples() >= 200) {
-                this.timeLog.log();
+                // this.timeLog.log();
                 this.timeLog.reset();
                 // clearInterval(interval);
             }
