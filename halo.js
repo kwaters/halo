@@ -605,8 +605,6 @@ var Halo = function() {
 }
 Halo.prototype = {
     resize: function(width, height) {
-        gl.viewport(0, 0, width, height);
-
         var ratio = width / height;
         this.viewMatrix[1] = this.viewMatrix[2] = 0.;
         if (ratio > 1.) {
@@ -626,7 +624,7 @@ Halo.prototype = {
         if (this.timeLog.running()) {
             this.timeLog.mark('browser');
             if (this.timeLog.samples() >= 200) {
-                // this.timeLog.log();
+                this.timeLog.log();
                 this.timeLog.reset();
                 // clearInterval(interval);
             }
@@ -703,6 +701,77 @@ Halo.prototype = {
 };
 window.Halo = Halo;
 
+var Master = function() {
+    this.halo = new Halo();
+    this.fbo = null;
+    this.tex = gl.createTexture();
+    this.width = 1;
+    this.height = 1;
+    this.vbo = gl.createBuffer();
+
+    this.shader = new Shader("texture_vertex", "texture_fragment");
+
+    // setup texture
+    gl.bindTexture(gl.TEXTURE_2D, this.tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    // setup vbo
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER,
+        new Float32Array([-1., -1., 1., -1., 1., 1., -1., 1.]),
+        gl.STATIC_DRAW);
+
+    var me = this;
+    this.drawClosure = function() {
+        me.draw();
+    };
+}
+Master.prototype = {
+    draw: function() {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+        this.halo.draw();
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        this.shader.bind();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+        this.shader.position(2, gl.FLOAT, false, 8, 0);
+        
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.tex);
+        this.shader.tex(0);
+
+        gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+    },
+    resize: function(width, height) {
+        this.width = width;
+        this.height = height;
+        gl.viewport(0, 0, width, height);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.deleteFramebuffer(this.fbo);
+        
+        gl.bindTexture(gl.TEXTURE_2D, this.tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0,
+            gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        this.fbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+            gl.TEXTURE_2D, this.tex, 0);
+
+        console.log(gl.checkFramebufferStatus(gl.FRAMEBUFFER) ==
+            gl.FRAMEBUFFER_COMPLETE);
+
+        this.halo.resize(width, height);
+    }
+}
+window.Master = Master;
+
 })();
 
 
@@ -713,7 +782,7 @@ window.Halo = Halo;
 
 (function() {
 
-var halo;
+var master;
 
 var resize = function() {
     var canvas = document.getElementById("c");
@@ -722,23 +791,37 @@ var resize = function() {
     canvas.width = width;
     canvas.height = height;
 
-    halo.resize(width, height);
-
+    master.resize(width, height);
     // redraw
-    window.setTimeout(halo.drawClosure, 0);
+    // window.setTimeout(master.drawClosure, 0);
 }
 
 var main = function() {
     gl = $("#c")[0].getContext('webgl');
     if (!gl)
-      gl = $("#c")[0].getContext('experimental-webgl');
+        gl = $("#c")[0].getContext('experimental-webgl');
 
-    halo = new Halo();
+    for (var prop in gl) {
+        if (typeof(gl[prop]) == 'number')
+            glenums[gl[prop]] = prop;
+    }
+
+    master = new Master();
 
     $(window).resize(resize);
     resize();
 
-    interval = window.setInterval(halo.drawClosure, 0);
+    var interval = window.setInterval(function() {
+        var ok = false;
+        try {
+            master.drawClosure();
+            ok = true;
+        } finally {
+            if (!ok) {
+                window.clearInterval(interval)
+            }
+        }
+    });
 }
 $(document).ready(main);
 

@@ -65,6 +65,26 @@
                 gl_FragColor = texture2D(tex, vec2(r, .5));
             }
         </script>
+        <script id="texture_vertex" type="x-glsl-shader/x-vertex">
+            attribute highp vec2 position;
+            varying highp vec2 pos;
+            varying highp vec2 tex_coord;
+            void main() {
+                pos = position;
+                tex_coord = vec2(.5 * position.x + .5, .5 * position.y + .5);
+                gl_Position = vec4(position, 0., 1.);
+            }
+        </script>
+        <script id="texture_fragment" type="x-glsl-shader/x-fragment">
+            varying highp vec2 pos;
+            varying highp vec2 tex_coord;
+            uniform lowp sampler2D tex;
+            void main() {
+                lowp vec4 color = texture2D(tex, tex_coord);
+                highp float attenuate = 1. - smoothstep(.8, 1.6, length(pos));
+                gl_FragColor = vec4(attenuate * color.rgb, 1.);
+            }
+        </script>
     </body>
 </html>
 
