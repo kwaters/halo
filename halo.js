@@ -801,11 +801,6 @@ var main = function() {
     if (!gl)
         gl = $("#c")[0].getContext('experimental-webgl');
 
-    for (var prop in gl) {
-        if (typeof(gl[prop]) == 'number')
-            glenums[gl[prop]] = prop;
-    }
-
     master = new Master();
 
     $(window).resize(resize);
