@@ -90,12 +90,9 @@
                 highp vec2 tex_position = .5 * screen_position + .5;
                 lowp vec4 color0 = texture2D(tex0, tex_position);
                 lowp vec4 color1 = texture2D(tex1, tex_position);
-                // highp float attenuate = 1. - smoothstep(.8, 1.6, length(pos));
-                // highp float attenuate = 1. - smoothstep(.7, .9, length(view_position));
                 highp float v = length(view_position) + alpha;
 
-                highp float line_width = .04;
-
+                highp float line_width = 3. * blur;
                 highp float mix1 = 1. - smoothstep(-line_width - blur, -line_width, v);
                 highp float mix2 = smoothstep(line_width, line_width + blur, v);
 

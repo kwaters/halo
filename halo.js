@@ -206,10 +206,11 @@ var range = function(low, high) {
     return (Math.random() * (high - low) + low) | 0;
 }
 
-var Animator = function(tricks) {
+var Animator = function(tricks, single) {
     this.tricks = tricks;
     this.running = [];
     this.next = 0;
+    this.single = single;
 
     this.trickList = []
     for (trick in tricks) {
@@ -231,16 +232,8 @@ Animator.prototype = {
         }
 
         // TODO: work on startup mess
-        /*
-        if (this.next < now) {
-            this.next = now + range(3000, 15000);
+        if (!running || !this.single)
             this.startTrick(now);
-        }
-
-        if (!running)
-            this.startTrick(now);
-        */
-        this.startTrick(now);
     },
     startTrick: function(now, trickNum) {
         if (trickNum === undefined) {
@@ -468,8 +461,6 @@ Texture.prototype = {
 }
 window.Texture = Texture;
 
-var frost = 0;
-
 })();
 
 
@@ -597,7 +588,7 @@ var Halo = function() {
         'limitIn': new Trick(makeLimitIn(this)),
         'blendColors': new Trick(makeBlendColors(this)),
         'changeWidth': new Trick(makeChangeWidth(this))
-    });
+    }, false);
     this.animator.startTrick(new Date().getTime(), 2);
 
     var me = this;
@@ -620,19 +611,20 @@ Halo.prototype = {
         // Anti-aliasing adjustment factor
         this.pixelSize *= .7;
     },
+    animate: function(now) {
+        this.animator.run(now);
+    },
     draw: function() {
         if (this.timeLog.running()) {
             this.timeLog.mark('browser');
             if (this.timeLog.samples() >= 200) {
-                this.timeLog.log();
+                // this.timeLog.log();
                 this.timeLog.reset();
-                // clearInterval(interval);
             }
         }
 
         this.timeLog.start();
 
-        this.animator.run(new Date().getTime());
         this.timeLog.mark('animation');
 
         var verts = [];
@@ -701,6 +693,37 @@ Halo.prototype = {
 };
 window.Halo = Halo;
 
+var CircleTransition = function() {
+    this.doneValue = 0;
+    this.alpha = -1.5;
+}
+CircleTransition.prototype = {
+    done: function() {
+        return this.doneValue > 0;
+    },
+    bind: function() {
+        this.shader.bind();
+        this.shader.alpha(this.alpha);
+    },
+    shader: null
+}
+
+var makeCircle = function(master) {
+    return function(trick) {
+        var circle = new CircleTransition(),
+            endAlpha = .1;
+        master.setTransition(circle);
+
+        if (Math.random() < .4) {
+            circle.alpha = endAlpha;
+            endAlpha = -1.5;
+        }
+        trick.animate(circle, 'alpha', endAlpha, 0, 1500);
+        trick.animate(circle, 'doneValue', 1., 1500, 1501);
+        trick.cooldown(7000);
+    }
+}
+
 var Master = function() {
     this.halo = [new Halo(), new Halo()];
     this.fbo = [null, null];
@@ -708,8 +731,14 @@ var Master = function() {
     this.width = 1;
     this.height = 1;
     this.vbo = gl.createBuffer();
+    this.transition = null;
 
-    this.shader = new Shader("base_effect_vertex", "circle_fragment");
+    CircleTransition.prototype.shader = new Shader("base_effect_vertex",
+        "circle_fragment");
+
+    this.animator = new Animator({
+        'circle': new Trick(makeCircle(this))
+    }, true);
 
     // setup textures
     for (var i = 0; i < 2; i++) {
@@ -733,6 +762,18 @@ var Master = function() {
 }
 Master.prototype = {
     draw: function() {
+        var now = new Date().getTime();
+        for (var i = 0; i < 2; i++) {
+            this.halo[i].animate(now);
+        }
+        this.animator.run(now);
+
+        if (!this.transition) {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            this.halo[0].draw();
+            return;
+        }
+
         for (var i = 0; i < 2; i++) {
             gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo[i]);
             this.halo[i].draw();
@@ -740,16 +781,10 @@ Master.prototype = {
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-        this.shader.bind();
+        this.transition.bind();
+
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-        this.shader.position(2, gl.FLOAT, false, 8, 0);
-
-        var t = new Date().getTime() % 20000;
-        t = t / 20000;
-        t = Math.abs(2 * t - 1);
-        t = 8 * t - 4;
-
-        this.shader.alpha(t);
+        this.transition.shader.position(2, gl.FLOAT, false, 8, 0);
 
         var viewMatrix = this.halo[0].viewMatrix,
             invDet = 1. / (viewMatrix[0] * viewMatrix[3] -
@@ -758,19 +793,26 @@ Master.prototype = {
                 -invDet * viewMatrix[1], -invDet * viewMatrix[2],
                 invDet * viewMatrix[0]]);
 
-        this.shader.view_transform(invViewMatrix);
+        this.transition.shader.view_transform(invViewMatrix);
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.tex[0]);
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, this.tex[1]);
 
-        this.shader.tex0(0);
-        this.shader.tex1(1);
+        this.transition.shader.tex0(0);
+        this.transition.shader.tex1(1);
         // TODO: move pixelSize into master
-        this.shader.blur(2 * this.halo[0].pixelSize);
+        this.transition.shader.blur(2 * this.halo[0].pixelSize);
 
         gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+
+        if (this.transition.done()) {
+            var t = this.halo[0];
+            this.halo[0] = this.halo[1];
+            this.halo[1] = t;
+            this.transition = null;
+        }
     },
     resize: function(width, height) {
         this.width = width;
@@ -795,6 +837,9 @@ Master.prototype = {
 
             this.halo[i].resize(width, height);
         }
+    },
+    setTransition: function(transition) {
+        this.transition = transition;
     }
 }
 window.Master = Master;
