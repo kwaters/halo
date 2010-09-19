@@ -65,24 +65,42 @@
                 gl_FragColor = texture2D(tex, vec2(r, .5));
             }
         </script>
-        <script id="texture_vertex" type="x-glsl-shader/x-vertex">
+        <script id="base_effect_vertex" type="x-glsl-shader/x-vertex">
             attribute highp vec2 position;
-            varying highp vec2 pos;
-            varying highp vec2 tex_coord;
+            uniform highp mat2 view_transform;
+
+            varying highp vec2 view_position;
+            varying highp vec2 screen_position;
+
             void main() {
-                pos = position;
-                tex_coord = vec2(.5 * position.x + .5, .5 * position.y + .5);
-                gl_Position = vec4(position, 0., 1.);
+                highp vec2 view = view_transform * position;
+
+                view_position = view;
+                screen_position = position;
+                gl_Position = vec4(position.xy, 0., 1.);
             }
         </script>
-        <script id="texture_fragment" type="x-glsl-shader/x-fragment">
-            varying highp vec2 pos;
-            varying highp vec2 tex_coord;
-            uniform lowp sampler2D tex;
+        <script id="circle_fragment" type="x-glsl-shader/x-fragment">
+            varying highp vec2 view_position;
+            varying highp vec2 screen_position;
+            uniform lowp sampler2D tex0;
+            uniform lowp sampler2D tex1;
+            uniform highp float alpha;
+            uniform highp float blur;
             void main() {
-                lowp vec4 color = texture2D(tex, tex_coord);
-                highp float attenuate = 1. - smoothstep(.8, 1.6, length(pos));
-                gl_FragColor = vec4(attenuate * color.rgb, 1.);
+                highp vec2 tex_position = .5 * screen_position + .5;
+                lowp vec4 color0 = texture2D(tex0, tex_position);
+                lowp vec4 color1 = texture2D(tex1, tex_position);
+                // highp float attenuate = 1. - smoothstep(.8, 1.6, length(pos));
+                // highp float attenuate = 1. - smoothstep(.7, .9, length(view_position));
+                highp float v = length(view_position) + alpha;
+
+                highp float line_width = .04;
+
+                highp float mix1 = 1. - smoothstep(-line_width - blur, -line_width, v);
+                highp float mix2 = smoothstep(line_width, line_width + blur, v);
+
+                gl_FragColor = vec4(mix1 * color0.rgb + mix2 * color1.rgb, 1.);
             }
         </script>
     </body>

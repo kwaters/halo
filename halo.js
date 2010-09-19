@@ -702,21 +702,23 @@ Halo.prototype = {
 window.Halo = Halo;
 
 var Master = function() {
-    this.halo = new Halo();
-    this.fbo = null;
-    this.tex = gl.createTexture();
+    this.halo = [new Halo(), new Halo()];
+    this.fbo = [null, null];
+    this.tex = [gl.createTexture(), gl.createTexture()];
     this.width = 1;
     this.height = 1;
     this.vbo = gl.createBuffer();
 
-    this.shader = new Shader("texture_vertex", "texture_fragment");
+    this.shader = new Shader("base_effect_vertex", "circle_fragment");
 
-    // setup texture
-    gl.bindTexture(gl.TEXTURE_2D, this.tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    // setup textures
+    for (var i = 0; i < 2; i++) {
+        gl.bindTexture(gl.TEXTURE_2D, this.tex[i]);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
 
     // setup vbo
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
@@ -731,18 +733,42 @@ var Master = function() {
 }
 Master.prototype = {
     draw: function() {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
-        this.halo.draw();
+        for (var i = 0; i < 2; i++) {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo[i]);
+            this.halo[i].draw();
+        }
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
         this.shader.bind();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
         this.shader.position(2, gl.FLOAT, false, 8, 0);
-        
+
+        var t = new Date().getTime() % 20000;
+        t = t / 20000;
+        t = Math.abs(2 * t - 1);
+        t = 8 * t - 4;
+
+        this.shader.alpha(t);
+
+        var viewMatrix = this.halo[0].viewMatrix,
+            invDet = 1. / (viewMatrix[0] * viewMatrix[3] -
+                viewMatrix[1] * viewMatrix[2]),
+            invViewMatrix = new Float32Array([invDet * viewMatrix[3],
+                -invDet * viewMatrix[1], -invDet * viewMatrix[2],
+                invDet * viewMatrix[0]]);
+
+        this.shader.view_transform(invViewMatrix);
+
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.tex);
-        this.shader.tex(0);
+        gl.bindTexture(gl.TEXTURE_2D, this.tex[0]);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, this.tex[1]);
+
+        this.shader.tex0(0);
+        this.shader.tex1(1);
+        // TODO: move pixelSize into master
+        this.shader.blur(2 * this.halo[0].pixelSize);
 
         gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
     },
@@ -751,23 +777,24 @@ Master.prototype = {
         this.height = height;
         gl.viewport(0, 0, width, height);
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        gl.deleteFramebuffer(this.fbo);
-        
-        gl.bindTexture(gl.TEXTURE_2D, this.tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0,
-            gl.RGBA, gl.UNSIGNED_BYTE, null);
-        gl.bindTexture(gl.TEXTURE_2D, null);
+        for (var i = 0; i < 2; i++) {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.deleteFramebuffer(this.fbo[i]);
 
-        this.fbo = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
-            gl.TEXTURE_2D, this.tex, 0);
+            gl.bindTexture(gl.TEXTURE_2D, this.tex[i]);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0,
+                gl.RGBA, gl.UNSIGNED_BYTE, null);
 
-        console.log(gl.checkFramebufferStatus(gl.FRAMEBUFFER) ==
-            gl.FRAMEBUFFER_COMPLETE);
+            this.fbo[i] = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo[i]);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+                gl.TEXTURE_2D, this.tex[i], 0);
 
-        this.halo.resize(width, height);
+            console.log(gl.checkFramebufferStatus(gl.FRAMEBUFFER) ==
+                gl.FRAMEBUFFER_COMPLETE);
+
+            this.halo[i].resize(width, height);
+        }
     }
 }
 window.Master = Master;
@@ -792,8 +819,6 @@ var resize = function() {
     canvas.height = height;
 
     master.resize(width, height);
-    // redraw
-    // window.setTimeout(master.drawClosure, 0);
 }
 
 var main = function() {
@@ -802,6 +827,7 @@ var main = function() {
         gl = $("#c")[0].getContext('experimental-webgl');
 
     master = new Master();
+    window.master = master;
 
     $(window).resize(resize);
     resize();
