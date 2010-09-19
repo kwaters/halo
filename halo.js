@@ -822,14 +822,19 @@ var resize = function() {
 }
 
 var main = function() {
-    gl = $("#c")[0].getContext('webgl');
+    var canvas = document.getElementById("c");
+    gl = canvas.getContext('webgl');
     if (!gl)
-        gl = $("#c")[0].getContext('experimental-webgl');
+        gl = canvas.getContext('experimental-webgl');
+    if (!gl) {
+        canvas.parentElement.innerHTML = "Unable to initialize WebGL.";
+        return;
+    }
 
     master = new Master();
     window.master = master;
 
-    $(window).resize(resize);
+    window.addEventListener("resize", resize, false);
     resize();
 
     var interval = window.setInterval(function() {
@@ -839,12 +844,12 @@ var main = function() {
             ok = true;
         } finally {
             if (!ok) {
-                window.clearInterval(interval)
+                window.clearInterval(interval);
             }
         }
     });
 }
-$(document).ready(main);
+window.addEventListener("load", main, false);
 
 })();
 
