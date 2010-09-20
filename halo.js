@@ -826,8 +826,6 @@ var Master = function() {
         new Float32Array([-1., -1., 1., -1., 1., 1., -1., 1.]),
         gl.STATIC_DRAW);
 
-    this.preanimate();
-
     var me = this;
     this.drawClosure = function() {
         me.draw();
@@ -966,6 +964,9 @@ var main = function() {
 
     window.addEventListener("resize", resize, false);
     resize();
+
+    // This must be done after resize.
+    master.preanimate();
 
     var interval = window.setInterval(function() {
         var ok = false;
