@@ -564,6 +564,14 @@ var makeBlendColors = function(halo) {
     }
 }
 
+var makeBlur = function(halo) {
+    return function(trick) {
+        trick.animate(halo, 'blur', 1., 0, 1000);
+        trick.animate(halo, 'blur', 0., 3000, 4000);
+        trick.cooldown(10000);
+    }
+}
+
 var Halo = function() {
     this.viewMatrix = new Float32Array(4);
     this.pixelSize = 1.;
@@ -571,6 +579,7 @@ var Halo = function() {
     this.invWidth = 35.;
     this.offset = 0.1;
     this.shader = new Shader("halo_vertex", "halo_fragment");
+    this.blur = 0.;
 
     this.texture = new Texture(gl, 32);
 
@@ -590,7 +599,8 @@ var Halo = function() {
         'limitOut': new Trick(makeLimitOut(this)),
         'limitIn': new Trick(makeLimitIn(this)),
         'blendColors': new Trick(makeBlendColors(this)),
-        'changeWidth': new Trick(makeChangeWidth(this))
+        'changeWidth': new Trick(makeChangeWidth(this)),
+        'blur': new Trick(makeBlur(this))
     }, false);
     this.animator.startTrick(new Date().getTime(), 2);
 
@@ -686,7 +696,8 @@ Halo.prototype = {
         this.shader.view_transform(this.viewMatrix);
         this.shader.inv_width(this.invWidth);
         this.shader.offset(this.offset);
-        this.shader.blur(this.invWidth * this.pixelSize);
+        this.shader.blur((this.invWidth * this.pixelSize) * (1 - this.blur) +
+            this.blur);
         this.shader.tex(0);
         this.shader.inv_texture_size(1 / 32.);
 
