@@ -211,6 +211,7 @@ var Animator = function(tricks, single) {
     this.running = [];
     this.next = 0;
     this.single = single;
+    this.wasRunning = false;
 
     this.trickList = []
     for (trick in tricks) {
@@ -232,8 +233,9 @@ Animator.prototype = {
         }
 
         // TODO: work on startup mess
-        if (!running || !this.single)
+        if (!this.wasRunning || !this.single)
             this.startTrick(now);
+        this.wasRunning = running;
     },
     startTrick: function(now, trickNum) {
         if (trickNum === undefined) {
@@ -696,6 +698,7 @@ window.Halo = Halo;
 var CircleTransition = function() {
     this.doneValue = 0;
     this.alpha = -1.5;
+    this.sign = 1.;
 }
 CircleTransition.prototype = {
     done: function() {
@@ -704,6 +707,7 @@ CircleTransition.prototype = {
     bind: function() {
         this.shader.bind();
         this.shader.alpha(this.alpha);
+        this.shader.sign(this.sign);
     },
     shader: null
 }
@@ -716,11 +720,12 @@ var makeCircle = function(master) {
 
         if (Math.random() < .4) {
             circle.alpha = endAlpha;
+            circle.sign = -1.;
             endAlpha = -1.5;
         }
         trick.animate(circle, 'alpha', endAlpha, 0, 1500);
         trick.animate(circle, 'doneValue', 1., 1500, 1501);
-        trick.cooldown(11000);
+        trick.cooldown(5000);
     }
 }
 
@@ -733,55 +738,41 @@ var SweepTransition = function() {
     this.end = null;
 
     while (Math.abs(this.origin[0]) < 1.5 && Math.abs(this.origin[1]) < 1.5) {
-        this.origin[0] = 20. * Math.random() - 10.;
-        this.origin[1] = -20. * Math.random() - 10.;
+        this.origin[0] = 12. * Math.random() - 6.;
+        this.origin[1] = 12. * Math.random() - 6.;
     }
-
-    console.log(this.origin[0], this.origin[1]);
 
     var corners = [[-1., -1.], [-1., 1.], [1., 1.], [1., -1.]],
         startAngle = 10.,
         endAngle = -10.;
 
     for (var i = 0; i < 4; i++) {
-        console.log(corners[i][1] - this.origin[1], corners[i][0] - this.origin[0]);
         angle = Math.atan2(corners[i][1] - this.origin[1],
             corners[i][0] - this.origin[0]);
-        console.log(angle);
         if (angle < startAngle) {
             this.target = corners[i];
             startAngle = angle;
-            console.log('less');
         }
         if (angle > endAngle) {
             endAngle = angle;
             this.end = corners[i];
-            console.log('more');
         }
     }
 
     self.first = 0;
-
-    console.log(corners);
-
-    console.log(this.target, this.target[0], this.target[1]);
-    console.log(this.end);
 }
 SweepTransition.prototype = {
     done: function() {
         return this.doneValue > 0;
     },
     bind: function() {
-        var A = this.origin[1] - this.target[1],
-            B = this.target[0] - this.origin[0],
+        var A = this.target[1] - this.origin[1],
+            B = this.origin[0] - this.target[0],
             C,
             inv_len = 1 / Math.sqrt(A * A + B * B);
         A *= inv_len;
         B *= inv_len;
         C = -(A * this.origin[0] + B * this.origin[1]),
-
-        console.log(this.target[0], this.target[1]);
-        console.log(A, B, C);
 
         this.shader.bind();
         this.shader.line(A, B, C);
@@ -796,7 +787,7 @@ var makeSweep = function(master) {
         trick.animate(sweep.target, 0, sweep.end[0], 0, 1000);
         trick.animate(sweep.target, 1, sweep.end[1], 0, 1000);
         trick.animate(sweep, 'doneValue', 1., 1000, 1001);
-        this.cooldown(15000);
+        this.cooldown(8000);
     }
 }
 
@@ -911,8 +902,9 @@ Master.prototype = {
             gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
                 gl.TEXTURE_2D, this.tex[i], 0);
 
-            console.log(gl.checkFramebufferStatus(gl.FRAMEBUFFER) ==
-                gl.FRAMEBUFFER_COMPLETE);
+            if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !=
+                gl.FRAMEBUFFER_COMPLETE)
+                throw "die";
 
             this.halo[i].resize(width, height);
         }
