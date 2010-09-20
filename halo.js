@@ -578,7 +578,7 @@ var makeLimitIn = function(halo) {
                 trick.animate(halo.texture.factors, 3 * i + j, nvs[3 * i + j],
                     t, t + 1);
             }
-            t += 200;
+            t += 75;
         }
         trick.cooldown(10000);
     }
