@@ -99,6 +99,27 @@
                 gl_FragColor = vec4(mix1 * color0.rgb + mix2 * color1.rgb, 1.);
             }
         </script>
+        <script id="sweep_fragment" type="x-glsl-shader/x-fragment">
+            varying highp vec2 view_position;
+            varying highp vec2 screen_position;
+            uniform lowp sampler2D tex0;
+            uniform lowp sampler2D tex1;
+            uniform highp float blur;
+            uniform highp vec3 line;
+            void main() {
+                highp vec2 tex_position = .5 * screen_position + .5;
+                lowp vec4 color0 = texture2D(tex0, tex_position);
+                lowp vec4 color1 = texture2D(tex1, tex_position);
+
+                highp float v = dot(line.xy, view_position) + line.z;
+
+                highp float line_width = 3. * blur;
+                highp float mix1 = 1. - smoothstep(-line_width - blur, -line_width, v);
+                highp float mix2 = smoothstep(line_width, line_width + blur, v);
+
+                gl_FragColor = vec4(mix1 * color0.rgb + mix2 * color1.rgb, 1.);
+            }
+        </script>
     </body>
 </html>
 

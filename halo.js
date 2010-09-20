@@ -720,7 +720,83 @@ var makeCircle = function(master) {
         }
         trick.animate(circle, 'alpha', endAlpha, 0, 1500);
         trick.animate(circle, 'doneValue', 1., 1500, 1501);
-        trick.cooldown(7000);
+        trick.cooldown(11000);
+    }
+}
+
+var SweepTransition = function() {
+    this.origin = [0., 0.];
+    this.sign = 1;
+    this.alpha = 0.;
+    this.doneValue = 0;
+    this.target = null;
+    this.end = null;
+
+    while (Math.abs(this.origin[0]) < 1.5 && Math.abs(this.origin[1]) < 1.5) {
+        this.origin[0] = 20. * Math.random() - 10.;
+        this.origin[1] = -20. * Math.random() - 10.;
+    }
+
+    console.log(this.origin[0], this.origin[1]);
+
+    var corners = [[-1., -1.], [-1., 1.], [1., 1.], [1., -1.]],
+        startAngle = 10.,
+        endAngle = -10.;
+
+    for (var i = 0; i < 4; i++) {
+        console.log(corners[i][1] - this.origin[1], corners[i][0] - this.origin[0]);
+        angle = Math.atan2(corners[i][1] - this.origin[1],
+            corners[i][0] - this.origin[0]);
+        console.log(angle);
+        if (angle < startAngle) {
+            this.target = corners[i];
+            startAngle = angle;
+            console.log('less');
+        }
+        if (angle > endAngle) {
+            endAngle = angle;
+            this.end = corners[i];
+            console.log('more');
+        }
+    }
+
+    self.first = 0;
+
+    console.log(corners);
+
+    console.log(this.target, this.target[0], this.target[1]);
+    console.log(this.end);
+}
+SweepTransition.prototype = {
+    done: function() {
+        return this.doneValue > 0;
+    },
+    bind: function() {
+        var A = this.origin[1] - this.target[1],
+            B = this.target[0] - this.origin[0],
+            C,
+            inv_len = 1 / Math.sqrt(A * A + B * B);
+        A *= inv_len;
+        B *= inv_len;
+        C = -(A * this.origin[0] + B * this.origin[1]),
+
+        console.log(this.target[0], this.target[1]);
+        console.log(A, B, C);
+
+        this.shader.bind();
+        this.shader.line(A, B, C);
+    }
+}
+
+var makeSweep = function(master) {
+    return function(trick) {
+        var sweep = new SweepTransition();
+        master.setTransition(sweep);
+
+        trick.animate(sweep.target, 0, sweep.end[0], 0, 1000);
+        trick.animate(sweep.target, 1, sweep.end[1], 0, 1000);
+        trick.animate(sweep, 'doneValue', 1., 1000, 1001);
+        this.cooldown(15000);
     }
 }
 
@@ -735,9 +811,12 @@ var Master = function() {
 
     CircleTransition.prototype.shader = new Shader("base_effect_vertex",
         "circle_fragment");
+    SweepTransition.prototype.shader = new Shader("base_effect_vertex",
+        "sweep_fragment");
 
     this.animator = new Animator({
-        'circle': new Trick(makeCircle(this))
+        'circle': new Trick(makeCircle(this)),
+        'sweep': new Trick(makeSweep(this))
     }, true);
 
     // setup textures
