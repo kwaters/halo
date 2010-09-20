@@ -94,7 +94,8 @@
                 highp float v = sign * (length(view_position) + alpha);
 
                 highp float line_width = 3. * blur;
-                highp float mix1 = 1. - smoothstep(-line_width - blur, -line_width, v);
+                highp float mix1 = 1. - smoothstep(-line_width - blur,
+                    -line_width, v);
                 highp float mix2 = smoothstep(line_width, line_width + blur, v);
 
                 gl_FragColor = vec4(mix1 * color0.rgb + mix2 * color1.rgb, 1.);
@@ -115,7 +116,8 @@
                 highp float v = dot(line.xy, view_position) + line.z;
 
                 highp float line_width = 3. * blur;
-                highp float mix1 = 1. - smoothstep(-line_width - blur, -line_width, v);
+                highp float mix1 = 1. - smoothstep(-line_width - blur,
+                    -line_width, v);
                 highp float mix2 = smoothstep(line_width, line_width + blur, v);
 
                 gl_FragColor = vec4(mix1 * color0.rgb + mix2 * color1.rgb, 1.);

@@ -241,7 +241,8 @@ Animator.prototype = {
         if (trickNum === undefined) {
             var tries = 10;
             do {
-                trickNum = (Math.random() * (this.trickList.length - 1) + 0.5) | 0;
+                trickNum = (Math.random() * (this.trickList.length - 1) +
+                    0.5) | 0;
                 trick = this.tricks[this.trickList[trickNum]];
             } while ((this.running[trickNum] == true ||
                 !trick.runnable(now)) &&
@@ -251,7 +252,7 @@ Animator.prototype = {
         }
         trick = this.tricks[this.trickList[trickNum]];
 
-        console.log('starting trick', this.trickList[trickNum]);
+        // console.log('starting trick', this.trickList[trickNum]);
         this.running[trickNum] = true;
         trick.start(now);
     }
@@ -825,12 +826,25 @@ var Master = function() {
         new Float32Array([-1., -1., 1., -1., 1., 1., -1., 1.]),
         gl.STATIC_DRAW);
 
+    this.preanimate();
+
     var me = this;
     this.drawClosure = function() {
         me.draw();
     };
 }
 Master.prototype = {
+    preanimate: function() {
+        // Work around janky animation startup by running the animations for a
+        // while before starting.
+        var now = new Date().getTime();
+        for (var time = now - 20.; time < now; time += 0.1) {
+            for (var i = 0; i < 2; i++) {
+                this.halo[i].animate(now);
+            }
+            this.animator.run(now);
+        }
+    },
     draw: function() {
         var now = new Date().getTime();
         for (var i = 0; i < 2; i++) {
