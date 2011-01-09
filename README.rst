@@ -26,7 +26,7 @@ This time I'm going to compute the Voronoi cells directly before rendering.
 
 --------
  Status
--------
+--------
 
 This has been finished, and merged into a larger repository.  The python
 implementation remains here in case it is useful at a later date.
