@@ -1,8 +1,8 @@
-**This project has been merged into http://code.google.com/p/webglsamples/**
-
 ======
  Halo
 ======
+
+**This project has been merged into http://code.google.com/p/webglsamples/**
 
 A WebGL demo inspired by the xscreensaver Halo by Jamie Zawinski.
 
