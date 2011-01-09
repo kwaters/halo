@@ -1,3 +1,5 @@
+**This project has been merged into http://code.google.com/p/webglsamples/**
+
 ======
  Halo
 ======
@@ -22,6 +24,13 @@ severely limited the number of points I could process.
 
 This time I'm going to compute the Voronoi cells directly before rendering.
 
+--------
+ Status
+-------
+
+This has been finished, and merged into a larger repository.  The python
+implementation remains here in case it is useful at a later date.
+
 ------
  Plan
 ------
@@ -35,7 +44,6 @@ This time I'm going to compute the Voronoi cells directly before rendering.
 
 2. Implement the shaders and drawing code in Python.
 
-3. Implement Voronoi cell determination in javascript using Canvas2D and jQuery.
+3. Implement Voronoi cell determination in javascript using Canvas2D.
 
 4. Sprinkle in some WebGL.
-
